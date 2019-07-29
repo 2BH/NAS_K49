@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 from tqdm import tqdm
 
-from utils import AvgrageMeter, accuracy
+from utils.utils import AvgrageMeter, accuracy
 
 
 class torchModel(nn.Module):
@@ -77,7 +77,6 @@ class torchModel(nn.Module):
         for images, labels in t:
             images = images.to(device)
             labels = labels.to(device)
-
             optimizer.zero_grad()
             logits = self(images)
             loss = criterion(logits, labels)

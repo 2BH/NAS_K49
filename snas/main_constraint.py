@@ -6,8 +6,8 @@ import torch.utils
 import torch.nn.functional as F
 import torchvision.datasets as dset
 from torch.autograd import Variable
-from model_search_cons import Network
-from option.default_option import TrainOptions
+from snas.model_search_cons import Network
+from snas.option.default_option import TrainOptions
 import os 
 import warnings
 warnings.filterwarnings("ignore")

@@ -8,8 +8,8 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torchsummary import summary
 
-from cnn import torchModel
-from datasets import K49
+from models.cnn import torchModel
+from utils.datasets import K49
 
 
 def main(model_config,
@@ -121,7 +121,7 @@ if __name__ == '__main__':
                                 help='Batch size',
                                 type=int)
     cmdline_parser.add_argument('-D', '--data_dir',
-                                default='../data',
+                                default='./data',
                                 help='Directory in which the data is stored (can be downloaded)')
     cmdline_parser.add_argument('-l', '--learning_rate',
                                 default=0.01,

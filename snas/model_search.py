@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from operations import *
-from torch.autograd import Variable
-from genotypes import PRIMITIVES
-from genotypes import Genotype
+from snas.operations import *
+from snas.genotypes import PRIMITIVES
+from snas.genotypes import Genotype
 
 
 class MixedOp(nn.Module):
@@ -61,7 +60,7 @@ class Cell(nn.Module):
 
 
 class Network(nn.Module):
-    def __init__(self, C, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3):
+    def __init__(self, C, C_input, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3):
         super(Network,self).__init__()
         self._C = C ## initial number of channels (given)
         self._num_classes = num_classes
@@ -69,10 +68,12 @@ class Network(nn.Module):
         self._criterion = criterion
         self._steps = steps
         self._multiplier = multiplier
+        self._input_channel = C_input
 
-        C_curr = stem_multiplier*C  
+        C_curr = stem_multiplier*C
+          
         self.stem = nn.Sequential(
-        nn.Conv2d(3, C_curr, 3, padding=1, bias=False),
+        nn.Conv2d(self._input_channel, C_curr, 3, padding=1, bias=False),
         nn.BatchNorm2d(C_curr)
         )
     
@@ -115,8 +116,8 @@ class Network(nn.Module):
         k = sum(1 for i in range(self._steps) for n in range(2+i))
         num_ops = len(PRIMITIVES)
 
-        self.alphas_normal = Variable(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
-        self.alphas_reduce = Variable(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
+        self.alphas_normal = torch.tensor(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
+        self.alphas_reduce = torch.tensor(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
         self._arch_parameters = [
             self.alphas_normal,
             self.alphas_reduce,

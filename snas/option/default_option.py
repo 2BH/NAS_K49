@@ -1,6 +1,6 @@
 class BaseOptions():
     def initialize(self):
-        self.dataroot = '../' # path to the dir of the dataset
+        self.dataroot = './data' # path to the dir of the dataset
         self.name = 'Default' # Name of the experiment
 
 class TrainOptions(BaseOptions):
@@ -24,3 +24,5 @@ class TrainOptions(BaseOptions):
         self.initial_temp = 2.5 # innitial softmax temperature
         self.anneal_rate = 0.00003 # annealation rate of softmax temperature
         self.train_portion = 0.5
+        self.lr_model = None
+        self.input_channels = 1 # input channels, KMINST=1
