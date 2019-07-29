@@ -41,7 +41,7 @@ tmp/**
 test-results.xml
 !build/
 
-
+*.npz
 
 # data
 data/*
