@@ -1,0 +1,11 @@
+# python
+.idea
+tags
+*.pyc
+log/
+
+# vscode
+.vscode/*
+
+# data
+./data/*
