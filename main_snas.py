@@ -6,8 +6,9 @@ import torch.utils
 import torch.nn.functional as F
 import torchvision.datasets as dset
 from torch.autograd import Variable
-from model_search import Network
-from option.default_option import TrainOptions
+from snas.model_search import Network
+from snas.option.default_option import TrainOptions
+from utils.datasets import *
 import os 
 import tqdm
 import warnings
@@ -17,20 +18,23 @@ import matplotlib.pyplot as plt
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 device = torch.device('cuda')
 opt = TrainOptions()
-CIFAR_CLASSES = 10
-criterion = nn.CrossEntropyLoss().cuda()
-model = Network(opt.init_channels, CIFAR_CLASSES, opt.layers, criterion)
-model.cuda()
-optimizer_model = torch.optim.SGD(model.parameters(),lr= 0.025,momentum = 0.9, weight_decay=3e-4)
-optimizer_arch = torch.optim.Adam(model.arch_parameters(),lr = 3e-4, betas=(0.5, 0.999), weight_decay = 1e-3)
 
 train_transform, valid_transform = utils._data_transforms_cifar10(opt)
 train_data = dset.CIFAR10(root='../', train=True, download=True, transform=train_transform)
 
+
+criterion = nn.CrossEntropyLoss().cuda()
+model = Network(opt.init_channels, CIFAR_CLASSES, opt.layers, criterion)
+model.cuda()
+
+optimizer_model = torch.optim.SGD(model.parameters(),lr= 0.025,momentum = 0.9, weight_decay=3e-4)
+optimizer_arch = torch.optim.Adam(model.arch_parameters(),lr = 3e-4, betas=(0.5, 0.999), weight_decay = 1e-3)
+
+
 num_train = len(train_data)
 indices = list(range(num_train))
 
-####DATALOADER 수정 필요한부분 
+####DATALOADER
 train_queue = torch.utils.data.DataLoader(
   train_data, batch_size=opt.batch_size,
   sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:5000]),
@@ -110,7 +114,7 @@ def infer(valid_queue, model, criterion):
 
   return top1.avg, top5.avg ,objs.avg
 
-####MAIN 함수 
+####MAIN
 val_acc_top5 = []
 val_acc_top1 = []
 for epoch in range(opt.epochs):
