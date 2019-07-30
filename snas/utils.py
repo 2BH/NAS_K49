@@ -19,7 +19,8 @@ class AvgrageMeter(object):
     self.sum += val * n
     self.cnt += n
     self.avg = self.sum / self.cnt
-    
+
+"""
 def _data_transforms_cifar10(opt):
   CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
   CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
@@ -38,6 +39,7 @@ def _data_transforms_cifar10(opt):
     transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
     ])
   return train_transform, valid_transform
+"""
 
 class Cutout(object):
     def __init__(self, length):

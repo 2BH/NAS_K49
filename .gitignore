@@ -3,8 +3,12 @@
 tags
 *.pyc
 log/
+# pytorch
+*.pt
+
 
 # vscode
+/.vscode/**
 .DS_Store
 .huskyrc.json
 out
