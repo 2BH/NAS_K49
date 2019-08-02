@@ -1,8 +1,8 @@
 import numpy as np 
 import torch 
-from genotypes import * 
-from visualize_ftn import * 
-from option.default_option import TrainOptions
+from snas.genotypes import * 
+from utils.visualize_ftn import * 
+from snas.option.default_option import TrainOptions
 opt = TrainOptions()
 
 epoch = int(70)

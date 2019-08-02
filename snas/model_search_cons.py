@@ -13,12 +13,12 @@ class MixedOp(nn.Module):
     super(MixedOp, self).__init__()
     self._ops = nn.ModuleList()
     self.COSTS = []
-    self.height = 32
-    self.width = 32
+    self.height = 28
+    self.width = 28
     for primitive in PRIMITIVES:
       op = OPS[primitive](C, stride, False)
       if 'sep' in primitive:
-        FLOP = 0;MAC = 0
+        FLOP = 0; MAC = 0
         FLOP1 = (self.height * self.width * op.op[1].kernel_size[0]**2 *op.op[1].in_channels * op.op[1].out_channels )
         FLOP1 = FLOP / op.op[1].groups
         FLOP2 = (self.height * self.width * op.op[1].kernel_size[0]**2)
@@ -27,7 +27,7 @@ class MixedOp(nn.Module):
         MAC1 = MAC1 + (op.op[1].in_channels * op.op[1].out_channels) 
         MAC2 = MAC1 + (op.op[1].in_channels * op.op[1].out_channels)/ op.op[1].groups
         MAC = (MAC1 + MAC2)*2
-
+      
       if 'dil' in primitive:
         FLOP = (self.width*self.height*op.op[1].in_channels*op.op[1].out_channels*op.op[1].kernel_size[0]**2) / op.op[1].groups
         FLOP +=(self.width*self.height*op.op[2].in_channels*op.op[2].out_channels) 
@@ -52,9 +52,6 @@ class MixedOp(nn.Module):
     self.height = x.shape[0]
     self.width = x.shape[1]
     return sum(z * op(x) for z, op in zip(Z, self._ops)) , sum(a for a in self.COSTS)
-
-
-
 
 
 class Cell(nn.Module):
@@ -93,23 +90,24 @@ class Cell(nn.Module):
       states.append(s)
       costs.append(cost)
 
-    return torch.cat(states[-self._multiplier:], dim=1),torch.sum(torch.tensor(costs[-self._multiplier:]))
+    return torch.cat(states[-self._multiplier:], dim=1), torch.sum(torch.tensor(costs[-self._multiplier:]))
 
 
 
-class Network(nn.Module):
-    def __init__(self, C, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3):
-        super(Network,self).__init__()
+class ConsNetwork(nn.Module):
+    def __init__(self, C, C_input, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3):
+        super(ConsNetwork, self).__init__()
         self._C = C ## initial number of channels (given)
         self._num_classes = num_classes
         self._layers = layers
         self._criterion = criterion
         self._steps = steps
         self._multiplier = multiplier
+        self._input_channel = C_input
 
         C_curr = stem_multiplier*C  ## output channel = stem_multiplier *input channel 
         self.stem = nn.Sequential(
-        nn.Conv2d(3, C_curr, 3, padding=1, bias=False),
+        nn.Conv2d(self._input_channel, C_curr, 3, padding=1, bias=False),
         nn.BatchNorm2d(C_curr)
         )
     
@@ -121,7 +119,7 @@ class Network(nn.Module):
                 C_curr *= 2
                 reduction = True
             else:
-                reduction = False  ##   1/3 지점과 2/3 지점에 reduction cell 만들어준다 
+                reduction = False  
             cell = Cell(steps, multiplier, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
             reduction_prev = reduction
             self.cells += [cell]
@@ -135,18 +133,18 @@ class Network(nn.Module):
     def forward(self, input , temperature):
         s0 = s1 = self.stem(input) ## Initialization of states 
         costs = 0
-        for i, cell in enumerate(self.cells):   ## cells는 8번 stack한 것이다. 
+        for i, cell in enumerate(self.cells): 
             if cell.reduction:
                 Z, score_function = self.ArchitectDist(self.alphas_reduce , temperature) # shape = [14,8]
             else:
                 Z, score_function = self.ArchitectDist(self.alphas_normal , temperature)
             s2 ,cost = cell(s0,s1,Z)
             s0, s1 = s1 ,s2
-            #s0, s1 , cost = s1, cell(s0, s1, Z) ## output cell하나 만드는데 이전 2개의 cell들이 필요하다. 
+            #s0, s1 , cost = s1, cell(s0, s1, Z) 
             costs += cost
         out = self.global_pooling(s1) 
         logits = self.classifier(out.view(out.size(0),-1))
-        return logits , score_function ,costs
+        return logits, score_function, costs
 
 
     def _initialize_alphas(self):

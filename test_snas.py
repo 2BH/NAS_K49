@@ -5,7 +5,7 @@ import torch.utils
 import torch.nn.functional as F
 from snas.model_search import Network
 from snas.model_search_cons import ConsNetwork
-from snas.option.default_option import TrainOptions
+from snas.option.default_option import TestOptions
 from utils.datasets import KMNIST, K49
 from utils.utils import *
 import torchvision.transforms as transforms
@@ -16,31 +16,13 @@ import datetime
 import tqdm
 import warnings
 import argparse
-warnings.filterwarnings("ignore")
-
 
 def main(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = '0'
     # device = torch.device('cuda')
-    opt = TrainOptions()
+    opt = TestOptions()
 
-    # Data/Log directory
-    os.makedirs(args.log_dir, exist_ok=True)
-    os.makedirs(args.data_dir, exist_ok=True)
-    
-    current_date = datetime.datetime.now()
-    timestamp = current_date.isoformat()
     data_dir = args.data_dir
-    log_path = args.log_dir+'/exp_{}'.format(timestamp)
-    os.mkdir(log_path)
-    log_dir = os.path.join(log_path, 'log.txt')
-
-    log_format = '%(asctime)s %(message)s'
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO,
-        format=log_format, datefmt='%m/%d %I:%M:%S %p')
-    fh = logging.FileHandler(log_dir)
-    fh.setFormatter(logging.Formatter(log_format))
-    logging.getLogger().addHandler(fh)
 
     # Data augmentations
     data_augmentations = args.data_aug
@@ -92,12 +74,12 @@ def main(args):
     # Dataloader
     train_queue = torch.utils.data.DataLoader(
         train_data, batch_size=opt.batch_size,
-        sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:num_train_data]),
+        # sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:num_train_data]),
         pin_memory=True, num_workers=2)
 
     valid_queue = torch.utils.data.DataLoader(
-        train_data, batch_size=opt.batch_size,
-        sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[num_train_data:num_train_data+num_valid_data]),
+        test_data, batch_size=opt.batch_size,
+        # sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[num_train_data:num_train_data+num_valid_data]),
         pin_memory=True, num_workers=2)
 
     # Learning rate scheduler
@@ -106,11 +88,22 @@ def main(args):
 
     # Stats
     lst_train_acc = []
-    lst_valid_acc = []
+    lst_test_acc = []
 
-    logging.info("args = %s\n", args)
+    model.load_state_dict(torch.load('log/exp_2019-08-01T15:03:20.786846/weights.pt'))
 
-    best_valid_acc = -np.inf
+    alpha_normal, alpha_reduce = model.arch_parameters()
+
+    print(model.arch_parameters)
+    print("-------------------------------------------------")
+    print(alpha_normal)
+
+    print("-------------------------------------------------")
+    print(alpha_reduce)
+    # np.save("alpha_normal", alpha_normal.detach.numpy())
+    # np.save("alpha_reduce", alpha_reduce.detach.numpy())
+
+    """
     for epoch in range(opt.epochs):
         logging.info("Starting epoch %d/%d", epoch+1, opt.epochs)
         np.random.seed(opt.seed)
@@ -129,20 +122,12 @@ def main(args):
         valid_acc, valid_valoss = infer(valid_queue, model, criterion, opt)
         
         lst_train_acc.append(train_acc)
-        lst_valid_acc.append(valid_acc)
-
-        # logging
-        logging.info('train_acc %f, train_valoss %f, train_poloss %f, valid_acc %f, valid_valoss %f',
-                     train_acc, train_valoss, train_poloss, valid_acc, valid_valoss)
+        lst_test_acc.append(test_acc)
 
         scheduler.step()
-        # save current model
-        if valid_acc > best_valid_acc:
-            torch.save(model.state_dict(), log_path + '/weights.pt')
-            logging.info("Save model in epoch %d" % epoch)
-    
+    """
 
-def train(train_queue, valid_queue, model, criterion, optimizer_arch, optimizer_model, opt, args):
+def train(train_queue, model, criterion, optimizer_arch, optimizer_model, opt, args):
     objs = AvgrageMeter()
     policy  = AvgrageMeter()
     top1 = AvgrageMeter()

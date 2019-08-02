@@ -1,8 +1,8 @@
-from genotypes import PRIMITIVES
-from genotypes import Genotype
+from snas.genotypes import PRIMITIVES
+from snas.genotypes import Genotype
 import torch.nn.functional as F
 import sys
-import genotypes
+import snas.genotypes
 from graphviz import Digraph
 
 def genotype(alphas_normal , alphas_reduce):
