@@ -2,7 +2,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from torch.autograd import Variable
 from tqdm import tqdm
 
 from utils.utils import AvgrageMeter, accuracy
@@ -46,7 +45,7 @@ class torchModel(nn.Module):
     # generate input sample and forward to get shape
     def _get_conv_output(self, shape):
         bs = 1
-        input = Variable(torch.rand(bs, *shape))
+        input = torch.tensor(torch.rand(bs, *shape))
         output_feat = self.conv_layers(input)
         n_size = output_feat.data.view(bs, -1).size(1)
         return n_size

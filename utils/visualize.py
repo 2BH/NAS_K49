@@ -1,24 +1,55 @@
-import numpy as np 
-import torch 
-from snas.genotypes import * 
-from utils.visualize_ftn import * 
-from snas.option.default_option import TrainOptions
-opt = TrainOptions()
-
-epoch = int(70)
-
-temperature = opt.initial_temp * np.exp(opt.anneal_rate * epoch)
-alpha_normal = np.load('alpha_npy/alpha_normal_' + str(epoch) + '.npy')
-alpha_reduce = np.load('alpha_npy/alpha_reduce_' + str(epoch) + '.npy')
+import sys
+import genotypes
+from graphviz import Digraph
 
 
-m_normal = torch.distributions.relaxed_categorical.RelaxedOneHotCategorical(
-    torch.tensor([temperature]), torch.tensor(alpha_normal)) 
-m_reduce = torch.distributions.relaxed_categorical.RelaxedOneHotCategorical(
-    torch.tensor([temperature]) , torch.tensor(alpha_reduce)) 
+def plot(genotype, filename):
+  g = Digraph(
+      format='pdf',
+      edge_attr=dict(fontsize='20', fontname="times"),
+      node_attr=dict(style='filled', shape='rect', align='center', fontsize='20', height='0.5', width='0.5', penwidth='2', fontname="times"),
+      engine='dot')
+  g.body.extend(['rankdir=LR'])
 
-alpha_normal = m_normal.sample().cpu().numpy()
-alpha_reduce = m_reduce.sample().cpu().numpy()
-ex = genotype(alpha_normal,alpha_reduce)
-plot(ex.normal,'normal.pdf')
-plot(ex.reduce,'reduce.pdf')
+  g.node("c_{k-2}", fillcolor='darkseagreen2')
+  g.node("c_{k-1}", fillcolor='darkseagreen2')
+  assert len(genotype) % 2 == 0
+  steps = len(genotype) // 2
+
+  for i in range(steps):
+    g.node(str(i), fillcolor='lightblue')
+
+  for i in range(steps):
+    for k in [2*i, 2*i + 1]:
+      op, j = genotype[k]
+      if j == 0:
+        u = "c_{k-2}"
+      elif j == 1:
+        u = "c_{k-1}"
+      else:
+        u = str(j-2)
+      v = str(i)
+      g.edge(u, v, label=op, fillcolor="gray")
+
+  g.node("c_{k}", fillcolor='palegoldenrod')
+  for i in range(steps):
+    g.edge(str(i), "c_{k}", fillcolor="gray")
+
+  g.render(filename, view=True)
+
+
+if __name__ == '__main__':
+  if len(sys.argv) != 2:
+    print("usage:\n python {} ARCH_NAME".format(sys.argv[0]))
+    sys.exit(1)
+
+  genotype_name = sys.argv[1]
+  try:
+    genotype = eval('genotypes.{}'.format(genotype_name))
+  except AttributeError:
+    print("{} is not specified in genotypes.py".format(genotype_name)) 
+    sys.exit(1)
+
+  plot(genotype.normal, "normal")
+  plot(genotype.reduce, "reduction")
+

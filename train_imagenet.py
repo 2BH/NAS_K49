@@ -3,20 +3,19 @@ import sys
 import numpy as np
 import time
 import torch
-import utils
+import utils.utils as utils
 import glob
 import random
 import logging
 import argparse
 import torch.nn as nn
-import genotypes
+import core.genotypes
 import torch.utils
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
 
-from torch.autograd import Variable
-from model import NetworkImageNet as Network
+from models.model import NetworkImageNet as Network
 
 
 parser = argparse.ArgumentParser("training imagenet")

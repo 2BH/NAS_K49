@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from operations import *
-from torch.autograd import Variable
-from utils import drop_path
+from core.operations import *
+from utils.utils import drop_path
 
 
 class Cell(nn.Module):
@@ -60,14 +59,14 @@ class Cell(nn.Module):
     return torch.cat([states[i] for i in self._concat], dim=1)
 
 
-class AuxiliaryHeadCIFAR(nn.Module):
+class AuxiliaryHeadKMNIST(nn.Module):
 
   def __init__(self, C, num_classes):
-    """assuming input size 8x8"""
-    super(AuxiliaryHeadCIFAR, self).__init__()
+    """assuming input size 7x7"""
+    super(AuxiliaryHeadKMNIST, self).__init__()
     self.features = nn.Sequential(
       nn.ReLU(inplace=True),
-      nn.AvgPool2d(5, stride=3, padding=0, count_include_pad=False), # image size = 2 x 2
+      nn.AvgPool2d(5, stride=2, padding=0, count_include_pad=False), # image size = 2 x 2
       nn.Conv2d(C, 128, 1, bias=False),
       nn.BatchNorm2d(128),
       nn.ReLU(inplace=True),
@@ -83,11 +82,11 @@ class AuxiliaryHeadCIFAR(nn.Module):
     return x
 
 
-class AuxiliaryHeadImageNet(nn.Module):
+class AuxiliaryHeadK49(nn.Module):
 
   def __init__(self, C, num_classes):
     """assuming input size 14x14"""
-    super(AuxiliaryHeadImageNet, self).__init__()
+    super(AuxiliaryHeadK49, self).__init__()
     self.features = nn.Sequential(
       nn.ReLU(inplace=True),
       nn.AvgPool2d(5, stride=2, padding=0, count_include_pad=False),
@@ -108,17 +107,18 @@ class AuxiliaryHeadImageNet(nn.Module):
     return x
 
 
-class NetworkCIFAR(nn.Module):
+class NetworkKMNIST(nn.Module):
 
-  def __init__(self, C, num_classes, layers, auxiliary, genotype):
-    super(NetworkCIFAR, self).__init__()
+  def __init__(self, C, C_input, num_classes, layers, auxiliary, genotype):
+    super(NetworkKMNIST, self).__init__()
     self._layers = layers
+    self._C_input = C_input
     self._auxiliary = auxiliary
 
     stem_multiplier = 3
     C_curr = stem_multiplier*C
     self.stem = nn.Sequential(
-      nn.Conv2d(3, C_curr, 3, padding=1, bias=False),
+      nn.Conv2d(C_input, C_curr, 3, padding=1, bias=False),
       nn.BatchNorm2d(C_curr)
     )
     
@@ -139,7 +139,7 @@ class NetworkCIFAR(nn.Module):
         C_to_auxiliary = C_prev
 
     if auxiliary:
-      self.auxiliary_head = AuxiliaryHeadCIFAR(C_to_auxiliary, num_classes)
+      self.auxiliary_head = AuxiliaryHeadKMNIST(C_to_auxiliary, num_classes)
     self.global_pooling = nn.AdaptiveAvgPool2d(1)
     self.classifier = nn.Linear(C_prev, num_classes)
 
@@ -156,15 +156,16 @@ class NetworkCIFAR(nn.Module):
     return logits, logits_aux
 
 
-class NetworkImageNet(nn.Module):
+class NetworkK49(nn.Module):
 
-  def __init__(self, C, num_classes, layers, auxiliary, genotype):
-    super(NetworkImageNet, self).__init__()
+  def __init__(self, C, C_input, num_classes, layers, auxiliary, genotype):
+    super(NetworkK49, self).__init__()
     self._layers = layers
+    self._C_input = C_input
     self._auxiliary = auxiliary
 
     self.stem0 = nn.Sequential(
-      nn.Conv2d(3, C // 2, kernel_size=3, stride=2, padding=1, bias=False),
+      nn.Conv2d(C_input, C // 2, kernel_size=3, stride=2, padding=1, bias=False),
       nn.BatchNorm2d(C // 2),
       nn.ReLU(inplace=True),
       nn.Conv2d(C // 2, C, 3, stride=2, padding=1, bias=False),
@@ -195,7 +196,7 @@ class NetworkImageNet(nn.Module):
         C_to_auxiliary = C_prev
 
     if auxiliary:
-      self.auxiliary_head = AuxiliaryHeadImageNet(C_to_auxiliary, num_classes)
+      self.auxiliary_head = AuxiliaryHeadK49(C_to_auxiliary, num_classes)
     self.global_pooling = nn.AvgPool2d(7)
     self.classifier = nn.Linear(C_prev, num_classes)
 

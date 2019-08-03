@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from operations import *
-from torch.autograd import Variable
-from genotypes import PRIMITIVES
-from genotypes import Genotype
+from core.operations import *
+from core.genotypes import PRIMITIVES
+from core.genotypes import Genotype
 
 def channel_shuffle(x, groups):
     batchsize, num_channels, height, width = x.data.size()
@@ -28,30 +27,38 @@ class MixedOp(nn.Module):
     super(MixedOp, self).__init__()
     self._ops = nn.ModuleList()
     self.mp = nn.MaxPool2d(2,2)
-
+    #self.bn=nn.BatchNorm2d(C//4, affine=False)
+    #self.conv1 = nn.Conv2d(C//4,C//4,kernel_size=1,stride=1,padding=0,bias=False)
     for primitive in PRIMITIVES:
-      op = OPS[primitive](C //4, stride, False)
+      op = OPS[primitive](C//2, stride, False)
       if 'pool' in primitive:
-        op = nn.Sequential(op, nn.BatchNorm2d(C //4, affine=False))
+        op = nn.Sequential(op, nn.BatchNorm2d(C//2, affine=False))
       self._ops.append(op)
 
-
   def forward(self, x, weights):
-    #channel proportion k=4  
+    
     dim_2 = x.shape[1]
-    xtemp = x[ : , :  dim_2//4, :, :]
-    xtemp2 = x[ : ,  dim_2//4:, :, :]
-    temp1 = sum(w * op(xtemp) for w, op in zip(weights, self._ops))
-    #reduction cell needs pooling before concat
+    xtemp = x[ : , :  dim_2//2, :, :]
+    xtemp2 = x[ : ,  dim_2//2:, :, :]
+    xtemp3 = x[:,dim_2// 4:dim_2// 2, :, :]
+    xtemp4 = x[:,dim_2// 2:, :, :]
+    
+    temp1 = sum(w.to(xtemp.device) * op(xtemp) for w, op in zip(weights, self._ops))
     if temp1.shape[2] == x.shape[2]:
+      #ans = torch.cat([temp1,self.bn(self.conv1(xtemp3))],dim=1)
+      #ans = torch.cat([ans,xtemp4],dim=1)
       ans = torch.cat([temp1,xtemp2],dim=1)
+      #ans = torch.cat([ans,x[:, 2*dim_2// 4: , :, :]],dim=1)
     else:
-      ans = torch.cat([temp1,self.mp(xtemp2)], dim=1)
-    ans = channel_shuffle(ans,4)
-    #ans = torch.cat([ans[ : ,  dim_2//4:, :, :],ans[ : , :  dim_2//4, :, :]],dim=1)
-    #except channe shuffle, channel shift also works
-    return ans
+      #ans = torch.cat([temp1,self.bn(self.conv1(self.mp(xtemp3)))],dim=1)
+      #ans = torch.cat([ans,self.mp(xtemp4)],dim=1)
 
+      ans = torch.cat([temp1,self.mp(xtemp2)], dim=1)
+
+    ans = channel_shuffle(ans,2)
+    return ans
+    
+    #return sum(w.to(x.device) * op(x) for w, op in zip(weights, self._ops))
 
 class Cell(nn.Module):
 
@@ -82,7 +89,8 @@ class Cell(nn.Module):
     states = [s0, s1]
     offset = 0
     for i in range(self._steps):
-      s = sum(weights2[offset+j]*self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
+      s = sum(weights2[offset+j].to(self._ops[offset+j](h, weights[offset+j]).device)*self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
+      #s = channel_shuffle(s,4)
       offset += len(states)
       states.append(s)
 
@@ -91,9 +99,10 @@ class Cell(nn.Module):
 
 class Network(nn.Module):
 
-  def __init__(self, C, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3):
+  def __init__(self, C, C_input, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3):
     super(Network, self).__init__()
     self._C = C
+    self._C_input = C_input
     self._num_classes = num_classes
     self._layers = layers
     self._criterion = criterion
@@ -101,14 +110,24 @@ class Network(nn.Module):
     self._multiplier = multiplier
 
     C_curr = stem_multiplier*C
-    self.stem = nn.Sequential(
-      nn.Conv2d(3, C_curr, 3, padding=1, bias=False),
-      nn.BatchNorm2d(C_curr)
+    self.stem0 = nn.Sequential(
+      nn.Conv2d(C_input, C_curr // 2, kernel_size=3, stride=2, padding=1, bias=False),
+      nn.BatchNorm2d(C_curr // 2),
+      nn.ReLU(inplace=True),
+      nn.Conv2d(C_curr // 2, C_curr, 3, stride=2, padding=1, bias=False),
+      nn.BatchNorm2d(C_curr),
     )
+
+    self.stem1 = nn.Sequential(
+      nn.ReLU(inplace=True),
+      nn.Conv2d(C_curr, C_curr, 3, stride=2, padding=1, bias=False),
+      nn.BatchNorm2d(C_curr),
+    )
+
  
     C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
     self.cells = nn.ModuleList()
-    reduction_prev = False
+    reduction_prev = True
     for i in range(layers):
       if i in [layers//3, 2*layers//3]:
         C_curr *= 2
@@ -126,13 +145,14 @@ class Network(nn.Module):
     self._initialize_alphas()
 
   def new(self):
-    model_new = Network(self._C, self._num_classes, self._layers, self._criterion).cuda()
+    model_new = Network(self._C, self._C_input, self._num_classes, self._layers, self._criterion).cuda()
     for x, y in zip(model_new.arch_parameters(), self.arch_parameters()):
         x.data.copy_(y.data)
     return model_new
 
   def forward(self, input):
-    s0 = s1 = self.stem(input)
+    s0 = self.stem0(input)
+    s1 = self.stem1(s0)
     for i, cell in enumerate(self.cells):
       if cell.reduction:
         weights = F.softmax(self.alphas_reduce, dim=-1)
@@ -169,10 +189,10 @@ class Network(nn.Module):
     k = sum(1 for i in range(self._steps) for n in range(2+i))
     num_ops = len(PRIMITIVES)
 
-    self.alphas_normal = Variable(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
-    self.alphas_reduce = Variable(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
-    self.betas_normal = Variable(1e-3*torch.randn(k).cuda(), requires_grad=True)
-    self.betas_reduce = Variable(1e-3*torch.randn(k).cuda(), requires_grad=True)
+    self.alphas_normal = torch.tensor(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
+    self.alphas_reduce = torch.tensor(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
+    self.betas_normal = torch.tensor(1e-3*torch.randn(k).cuda(), requires_grad=True)
+    self.betas_reduce = torch.tensor(1e-3*torch.randn(k).cuda(), requires_grad=True)
     self._arch_parameters = [
       self.alphas_normal,
       self.alphas_reduce,
@@ -194,7 +214,7 @@ class Network(nn.Module):
         W = weights[start:end].copy()
         W2 = weights2[start:end].copy()
         for j in range(n):
-          W[j,:]=W[j,:]*W2[j]
+            W[j,:] = W[j,:]*W2[j]
         edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != PRIMITIVES.index('none')))[:2]
         
         #edges = sorted(range(i + 2), key=lambda x: -W2[x])[:2]
@@ -214,6 +234,7 @@ class Network(nn.Module):
     weightsn2 = F.softmax(self.betas_normal[0:2], dim=-1)
     for i in range(self._steps-1):
       end = start + n
+      #print(self.betas_reduce[start:end])
       tw2 = F.softmax(self.betas_reduce[start:end], dim=-1)
       tn2 = F.softmax(self.betas_normal[start:end], dim=-1)
       start = end

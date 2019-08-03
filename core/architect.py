@@ -1,8 +1,6 @@
 import torch
 import numpy as np
 import torch.nn as nn
-from torch.autograd import Variable
-
 
 def _concat(xs):
   return torch.cat([x.view(-1) for x in xs])
@@ -54,7 +52,7 @@ class Architect(object):
 
     for v, g in zip(self.model.arch_parameters(), dalpha):
       if v.grad is None:
-        v.grad = Variable(g.data)
+        v.grad = torch.tensor(g.data)
       else:
         v.grad.data.copy_(g.data)
 

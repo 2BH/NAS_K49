@@ -3,17 +3,16 @@ import sys
 import glob
 import numpy as np
 import torch
-import utils
+import utils.utils as utils
 import logging
 import argparse
 import torch.nn as nn
-import genotypes
+import core.genotypes
 import torch.utils
 import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
 
-from torch.autograd import Variable
-from model import NetworkCIFAR as Network
+from models.model import NetworkCIFAR as Network
 
 
 parser = argparse.ArgumentParser("cifar")
@@ -81,8 +80,8 @@ def infer(test_queue, model, criterion):
   model.eval()
 
   for step, (input, target) in enumerate(test_queue):
-    input = Variable(input, volatile=True).cuda()
-    target = Variable(target, volatile=True).cuda(async=True)
+    input = torch.tensor(input, volatile=True).cuda()
+    target = torch.tensor(target, volatile=True).cuda(async=True)
 
     logits, _ = model(input)
     loss = criterion(logits, target)
