@@ -56,7 +56,7 @@ timestamp = "2019-08-02T13:57:54.488278"
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)
 os.makedirs(log_path, exist_ok=True)
-log_dir = os.path.join(log_path, 'log_test_aux.txt')
+log_dir = os.path.join(log_path, 'log_test_aux_t.txt')
 
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -155,7 +155,7 @@ def train(train_queue, model, criterion, optimizer):
   top1 = utils.AvgrageMeter()
   model.train()
 
-  for step, (input, target) in tqdm.tqdm(enumerate(train_queue)):
+  for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
     input = torch.tensor(input).cuda()
     target = torch.tensor(target).cuda(async=True)
 
@@ -185,7 +185,7 @@ def infer(valid_queue, model, criterion):
   top1 = utils.AvgrageMeter()
   model.eval()
   with torch.no_grad():
-    for step, (input, target) in tqdm.tqdm(enumerate(valid_queue)):
+    for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
       input = torch.tensor(input).cuda()
       target = torch.tensor(target).cuda(async=True)
 

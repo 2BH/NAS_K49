@@ -5,20 +5,24 @@ import time
 import torch
 import utils.utils as utils
 import glob
+import tqdm
 import random
 import logging
 import argparse
 import torch.nn as nn
 import core.genotypes
+from utils.datasets import K49
 import torch.utils
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
 
-from models.model import NetworkImageNet as Network
+from models.model import NetworkK49
+from sklearn.metrics import balanced_accuracy_score
 
-
-parser = argparse.ArgumentParser("training imagenet")
+parser = argparse.ArgumentParser("K49")
+parser.add_argument('--data_aug', type=str, default=None, help='Data Augmentation method')
+parser.add_argument('--data_dir', type=str, default='./data', help='location of the data corpus')
 parser.add_argument('--workers', type=int, default=32, help='number of workers to load dataset')
 parser.add_argument('--batch_size', type=int, default=256, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.1, help='init learning rate')
@@ -37,23 +41,29 @@ parser.add_argument('--arch', type=str, default='PCDARTS', help='which architect
 parser.add_argument('--grad_clip', type=float, default=5., help='gradient clipping')
 parser.add_argument('--label_smooth', type=float, default=0.1, help='label smoothing')
 parser.add_argument('--lr_scheduler', type=str, default='linear', help='lr scheduler, linear or cosine')
-parser.add_argument('--tmp_data_dir', type=str, default='/tmp/cache/', help='temp data dir')
 parser.add_argument('--note', type=str, default='try', help='note for this run')
+args = parser.parse_args()
 
 
-args, unparsed = parser.parse_known_args()
+# logging 
+os.makedirs(args.log_dir, exist_ok=True)
+os.makedirs(args.data_dir, exist_ok=True)
 
-args.save = '{}eval-{}-{}'.format(args.save, args.note, time.strftime("%Y%m%d-%H%M%S"))
-utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
+timestamp = "2019-08-02T13:57:54.488278"
+
+data_dir = args.data_dir
+log_path = args.log_dir+'/exp_{}'.format(timestamp)
+os.makedirs(log_path, exist_ok=True)
+log_dir = os.path.join(log_path, 'log_K49.txt')
 
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format=log_format, datefmt='%m/%d %I:%M:%S %p')
-fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
+fh = logging.FileHandler(log_dir)
 fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 
-CLASSES = 1000
+num_classes = 49
 
 class CrossEntropyLabelSmooth(nn.Module):
 
@@ -80,13 +90,12 @@ def main():
     cudnn.enabled=True
     torch.cuda.manual_seed(args.seed)
     logging.info("args = %s", args)
-    logging.info("unparsed_args = %s", unparsed)
     num_gpus = torch.cuda.device_count()   
     genotype = eval("genotypes.%s" % args.arch)
     print('---------Genotype---------')
     logging.info(genotype)
     print('--------------------------') 
-    model = Network(args.init_channels, CLASSES, args.layers, args.auxiliary, genotype)
+    model = NetworkK49(args.init_channels, args.input_channels, num_classes, args.layers, args.auxiliary, genotype)
     if num_gpus > 1:
         model = nn.DataParallel(model)
         model = model.cuda()
@@ -96,7 +105,7 @@ def main():
 
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.cuda()
-    criterion_smooth = CrossEntropyLabelSmooth(CLASSES, args.label_smooth)
+    criterion_smooth = CrossEntropyLabelSmooth(num_classes, args.label_smooth)
     criterion_smooth = criterion_smooth.cuda()
 
     optimizer = torch.optim.SGD(
@@ -105,42 +114,27 @@ def main():
         momentum=args.momentum,
         weight_decay=args.weight_decay
         )
-    data_dir = os.path.join(args.tmp_data_dir, 'imagenet')
-    traindir = os.path.join(data_dir, 'train')
-    validdir = os.path.join(data_dir, 'val')
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    train_data = dset.ImageFolder(
-        traindir,
-        transforms.Compose([
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(
-                brightness=0.4,
-                contrast=0.4,
-                saturation=0.4,
-                hue=0.2),
-            transforms.ToTensor(),
-            normalize,
-        ]))
-    valid_data = dset.ImageFolder(
-        validdir,
-        transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ]))
+    data_augmentations = args.data_aug
+    if data_augmentations is None:
+        data_augmentations = transforms.ToTensor()
+    elif isinstance(type(data_augmentations), list):
+        data_augmentations = transforms.Compose(data_augmentations)
+    elif not isinstance(data_augmentations, transforms.Compose):
+        raise NotImplementedError
+
+    # Dataset
+
+    train_data = K49(args.data_dir, True, data_augmentations)
+    test_data = K49(args.data_dir, False, data_augmentations)
 
     train_queue = torch.utils.data.DataLoader(
-        train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=args.workers)
+        train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=2)
 
     valid_queue = torch.utils.data.DataLoader(
-        valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=args.workers)
+        test_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
 
-#    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.decay_period, gamma=args.gamma)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs))
     best_acc_top1 = 0
-    best_acc_top5 = 0
     for epoch in range(args.epochs):
         if args.lr_scheduler == 'cosine':
             scheduler.step()
@@ -163,14 +157,11 @@ def main():
         train_acc, train_obj = train(train_queue, model, criterion_smooth, optimizer)
         logging.info('Train_acc: %f', train_acc)
 
-        valid_acc_top1, valid_acc_top5, valid_obj = infer(valid_queue, model, criterion)
+        valid_acc_top1, valid_obj = infer(valid_queue, model, criterion)
         logging.info('Valid_acc_top1: %f', valid_acc_top1)
-        logging.info('Valid_acc_top5: %f', valid_acc_top5)
         epoch_duration = time.time() - epoch_start
         logging.info('Epoch time: %ds.', epoch_duration)
         is_best = False
-        if valid_acc_top5 > best_acc_top5:
-            best_acc_top5 = valid_acc_top5
         if valid_acc_top1 > best_acc_top1:
             best_acc_top1 = valid_acc_top1
             is_best = True
@@ -194,7 +185,6 @@ def adjust_lr(optimizer, epoch):
 def train(train_queue, model, criterion, optimizer):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
     batch_time = utils.AvgrageMeter()
     model.train()
 
@@ -213,11 +203,11 @@ def train(train_queue, model, criterion, optimizer):
         nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         optimizer.step()
         batch_time.update(time.time() - b_start)
-        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+        (prec1,) = utils.accuracy(logits, target, topk=(1,))
+        
         n = input.size(0)
         objs.update(loss.data.item(), n)
         top1.update(prec1.data.item(), n)
-        top5.update(prec5.data.item(), n)
 
         if step % args.report_freq == 0:
             end_time = time.time()
@@ -227,8 +217,8 @@ def train(train_queue, model, criterion, optimizer):
             else:
                 duration = end_time - start_time
                 start_time = time.time()
-            logging.info('TRAIN Step: %03d Objs: %e R1: %f R5: %f Duration: %ds BTime: %.3fs', 
-                                    step, objs.avg, top1.avg, top5.avg, duration, batch_time.avg)
+            logging.info('TRAIN Step: %03d Objs: %e R1: %f Duration: %ds BTime: %.3fs', 
+                                    step, objs.avg, top1.avg, duration, batch_time.avg)
 
     return top1.avg, objs.avg
 
@@ -236,7 +226,6 @@ def train(train_queue, model, criterion, optimizer):
 def infer(valid_queue, model, criterion):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
     model.eval()
 
     for step, (input, target) in enumerate(valid_queue):
@@ -246,11 +235,10 @@ def infer(valid_queue, model, criterion):
             logits, _ = model(input)
             loss = criterion(logits, target)
 
-        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+        (prec1,) = utils.accuracy(logits, target, topk=(1,))
         n = input.size(0)
         objs.update(loss.data.item(), n)
         top1.update(prec1.data.item(), n)
-        top5.update(prec5.data.item(), n)
 
         if step % args.report_freq == 0:
             end_time = time.time()
@@ -260,9 +248,9 @@ def infer(valid_queue, model, criterion):
             else:
                 duration = end_time - start_time
                 start_time = time.time()
-            logging.info('VALID Step: %03d Objs: %e R1: %f R5: %f Duration: %ds', step, objs.avg, top1.avg, top5.avg, duration)
+            logging.info('VALID Step: %03d Objs: %e R1: %f Duration: %ds', step, objs.avg, top1.avg, duration)
 
-    return top1.avg, top5.avg, objs.avg
+    return top1.avg, objs.avg
 
 
 if __name__ == '__main__':
