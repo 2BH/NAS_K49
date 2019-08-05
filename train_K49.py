@@ -29,7 +29,7 @@ parser.add_argument('--learning_rate', type=float, default=0.1, help='init learn
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=3e-5, help='weight decay')
 parser.add_argument('--report_freq', type=float, default=100, help='report frequency')
-parser.add_argument('--epochs', type=int, default=20, help='num of training epochs')
+parser.add_argument('--epochs', type=int, default=250, help='num of training epochs')
 parser.add_argument('--init_channels', type=int, default=48, help='num of init channels')
 parser.add_argument('--layers', type=int, default=14, help='total number of layers')
 parser.add_argument('--auxiliary', action='store_true', default=False, help='use auxiliary tower')
@@ -49,8 +49,8 @@ args = parser.parse_args()
 os.makedirs(args.log_dir, exist_ok=True)
 os.makedirs(args.data_dir, exist_ok=True)
 
-timestamp = "2019-08-02T13:57:54.488278"
-
+# timestamp = "2019-08-02T13:57:54.488278"
+timestamp = "2019-08-05T10:25:58.051240"
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)
 os.makedirs(log_path, exist_ok=True)
