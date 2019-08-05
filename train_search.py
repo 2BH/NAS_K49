@@ -142,6 +142,9 @@ def main():
     lr = scheduler.get_lr()[0]
     logging.info('epoch %d/%d lr %e', epoch, args.epochs, lr)
 
+    # print the genotype
+    genotype = model.genotype()
+    logging.info('genotype = %s', genotype)
     # training
     train_acc, train_obj = train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,epoch)
     logging.info('train_acc %f', train_acc)
