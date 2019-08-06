@@ -17,7 +17,7 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
 
-from models.model import NetworkK49
+from models.model import KuzushijiNet as Network
 from sklearn.metrics import balanced_accuracy_score
 
 parser = argparse.ArgumentParser("K49")
@@ -29,17 +29,20 @@ parser.add_argument('--learning_rate', type=float, default=0.1, help='init learn
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=3e-5, help='weight decay')
 parser.add_argument('--report_freq', type=float, default=100, help='report frequency')
-parser.add_argument('--epochs', type=int, default=250, help='num of training epochs')
+parser.add_argument('--epochs', type=int, default=20, help='num of training epochs')
 parser.add_argument('--init_channels', type=int, default=48, help='num of init channels')
+parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
 parser.add_argument('--layers', type=int, default=14, help='total number of layers')
 parser.add_argument('--auxiliary', action='store_true', default=False, help='use auxiliary tower')
 parser.add_argument('--auxiliary_weight', type=float, default=0.4, help='weight for auxiliary loss')
+parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
+parser.add_argument('--cutout_length', type=int, default=14, help='cutout length')
 parser.add_argument('--drop_path_prob', type=float, default=0, help='drop path probability')
-parser.add_argument('--save', type=str, default='/tmp/checkpoints/', help='experiment name')
 parser.add_argument('--seed', type=int, default=0, help='random seed')
 parser.add_argument('--arch', type=str, default='PCDARTS', help='which architecture to use')
 parser.add_argument('--grad_clip', type=float, default=5., help='gradient clipping')
 parser.add_argument('--label_smooth', type=float, default=0.1, help='label smoothing')
+parser.add_argument('--log_dir', type=str, default='./log', help='logging file location')
 parser.add_argument('--lr_scheduler', type=str, default='linear', help='lr scheduler, linear or cosine')
 parser.add_argument('--note', type=str, default='try', help='note for this run')
 args = parser.parse_args()
@@ -50,11 +53,11 @@ os.makedirs(args.log_dir, exist_ok=True)
 os.makedirs(args.data_dir, exist_ok=True)
 
 # timestamp = "2019-08-02T13:57:54.488278"
-timestamp = "2019-08-05T10:25:58.051240"
+timestamp = "2019-08-03T23:15:04.040061"
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)
 os.makedirs(log_path, exist_ok=True)
-log_dir = os.path.join(log_path, 'log_K49.txt')
+log_dir = os.path.join(log_path, 'log_K49_aux.txt')
 
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -91,11 +94,11 @@ def main():
     torch.cuda.manual_seed(args.seed)
     logging.info("args = %s", args)
     num_gpus = torch.cuda.device_count()   
-    genotype = eval("genotypes.%s" % args.arch)
+    genotype = eval("core.genotypes.%s" % args.arch)
     print('---------Genotype---------')
     logging.info(genotype)
     print('--------------------------') 
-    model = NetworkK49(args.init_channels, args.input_channels, num_classes, args.layers, args.auxiliary, genotype)
+    model = Network(args.init_channels, args.input_channels, num_classes, args.layers, args.auxiliary, genotype)
     if num_gpus > 1:
         model = nn.DataParallel(model)
         model = model.cuda()
@@ -170,7 +173,7 @@ def main():
             'state_dict': model.state_dict(),
             'best_acc_top1': best_acc_top1,
             'optimizer' : optimizer.state_dict(),
-            }, is_best, args.save)        
+            }, is_best, log_path)        
         
 def adjust_lr(optimizer, epoch):
     # Smaller slope for the last 5 epochs because lr * 1/250 is relatively large

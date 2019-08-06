@@ -57,6 +57,29 @@ class Cutout(object):
         img *= mask
         return img
 
+def data_transforms_Kuzushiji(args):
+  if args.set == "KMNIST":
+    MEAN = [0.19176215]
+    STD = [0.34834283]
+  elif args.set == "K49":
+    MEAN = [0.18006225]
+    STD  = [0.34213777]
+  else:
+    raise NotImplementedError
+
+  train_transform = transforms.Compose([
+    transforms.RandomCrop(28, padding=2),
+    transforms.ToTensor(),
+    transforms.Normalize(MEAN, STD),
+  ])
+  if args.cutout:
+    train_transform.transforms.append(Cutout(args.cutout_length))
+
+  valid_transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize(MEAN, STD),
+    ])
+  return train_transform, valid_transform
 
 def count_parameters_in_MB(model):
   return np.sum(np.prod(v.size()) for name, v in model.named_parameters() if "auxiliary" not in name)/1e6
@@ -73,10 +96,8 @@ def save_checkpoint(state, is_best, save):
 def save(model, model_path):
   torch.save(model.state_dict(), model_path)
 
-
 def load(model, model_path):
   model.load_state_dict(torch.load(model_path))
-
 
 def drop_path(x, drop_prob):
   if drop_prob > 0.:
@@ -87,6 +108,7 @@ def drop_path(x, drop_prob):
   return x
 
 
+# Not used
 def create_exp_dir(path, scripts_to_save=None):
   if not os.path.exists(path):
     os.mkdir(path)

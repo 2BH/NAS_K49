@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-import glob
 import numpy as np
 import tqdm
 import torch
@@ -111,10 +110,8 @@ def main():
   # Dataset
   if args.set == "KMNIST":
     train_data = KMNIST(args.data_dir, True, data_augmentations)
-    # test_data = KMNIST(args.data_dir, False, data_augmentations)
   elif args.set == "K49":
     train_data = K49(args.data_dir, True, data_augmentations)
-    # test_data = K49(args.data_dir, False, data_augmentations)
   else:
     raise ValueError("Unknown Dataset %s" % args.dataset)
 
@@ -137,7 +134,11 @@ def main():
 
   architect = Architect(model, args)
 
+  # counting time
+  t = 0
   for epoch in range(args.epochs):
+    t1 = time.time()
+    
     scheduler.step()
     lr = scheduler.get_lr()[0]
     logging.info('epoch %d/%d lr %e', epoch, args.epochs, lr)
@@ -145,16 +146,21 @@ def main():
     # print the genotype
     genotype = model.genotype()
     logging.info('genotype = %s', genotype)
+    
     # training
     train_acc, train_obj = train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,epoch)
+    t2 = time.time()
+    t += t2 - t1
     logging.info('train_acc %f', train_acc)
 
     # validation
     if args.epochs-epoch<=1:
       valid_acc, valid_obj = infer(valid_queue, model, criterion)
       logging.info('valid_acc %f', valid_acc)
-
+    
     utils.save(model, os.path.join(log_path, 'weights.pt'))
+  t = t/60/60
+  logging.info("Training time cost: %f" % t)
 
 
 def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,epoch):
@@ -179,7 +185,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
     input_search = torch.tensor(input_search, requires_grad=False).cuda()
     target_search = torch.tensor(target_search, requires_grad=False).cuda(async=True)
 
-    if epoch >= 15:
+    if epoch >= 10:
       architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
 
     optimizer.zero_grad()

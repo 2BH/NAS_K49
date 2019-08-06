@@ -16,13 +16,12 @@ import torch.utils
 import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
-from models.model import NetworkKMNIST
-from models.model import NetworkK49
+from models.model import KuzushijiNet as Network 
 
 
-parser = argparse.ArgumentParser("kmnist")
+parser = argparse.ArgumentParser("kuzushiji")
 parser.add_argument('--data_dir', type=str, default='./data', help='location of the data corpus')
-parser.add_argument('--data_aug', type=str, default=None, help='Data Augmentation method')
+# parser.add_argument('--data_aug', type=str, default=None, help='Data Augmentation method')
 parser.add_argument('--set', type=str, default='KMNIST', help='The dataset to be trained')
 parser.add_argument('--batch_size', type=int, default=96, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
@@ -38,7 +37,7 @@ parser.add_argument('--model_path', type=str, default='saved_models', help='path
 parser.add_argument('--auxiliary', action='store_true', default=False, help='use auxiliary tower')
 parser.add_argument('--auxiliary_weight', type=float, default=0.4, help='weight for auxiliary loss')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
-parser.add_argument('--cutout_length', type=int, default=14, help='cutout length')
+parser.add_argument('--cutout_length', type=int, default=6, help='cutout length')
 parser.add_argument('--drop_path_prob', type=float, default=0.3, help='drop path probability')
 parser.add_argument('--log_dir', type=str, default='./log', help='logging file location')
 parser.add_argument('--seed', type=int, default=0, help='random seed')
@@ -56,7 +55,7 @@ timestamp = "2019-08-02T13:57:54.488278"
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)
 os.makedirs(log_path, exist_ok=True)
-log_dir = os.path.join(log_path, 'log_test_aux_t.txt')
+log_dir = os.path.join(log_path, 'log_test_aux_t_f.txt')
 
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -88,10 +87,10 @@ def main():
   logging.info("args = %s", args)
 
   genotype = eval("core.genotypes.%s" % args.arch)
-  if args.set == "KMNIST":
-    model = NetworkKMNIST(args.init_channels, args.input_channels, num_classes, args.layers, args.auxiliary, genotype)
-  elif args.set == "K49":
-    model = NetworkK49(args.init_channels, args.input_channels, num_classes, args.layers, args.auxiliary, genotype)
+  #if args.set == "KMNIST":
+  #  model = NetworkKMNIST(args.init_channels, args.input_channels, num_classes, args.layers, args.auxiliary, genotype)
+  #elif args.set == "K49":
+  model = Network(args.init_channels, args.input_channels, num_classes, args.layers, args.auxiliary, genotype)
 
   model = model.cuda()
 
@@ -107,21 +106,15 @@ def main():
       )
 
   # Data augmentations
-  data_augmentations = args.data_aug
-  if data_augmentations is None:
-    data_augmentations = transforms.ToTensor()
-  elif isinstance(type(data_augmentations), list):
-      data_augmentations = transforms.Compose(data_augmentations)
-  elif not isinstance(data_augmentations, transforms.Compose):
-      raise NotImplementedError
+  train_transform, valid_transform = utils.data_transforms_Kuzushiji(args)
   
   # Dataset
   if args.set == "KMNIST":
-    train_data = KMNIST(args.data_dir, True, data_augmentations)
-    test_data = KMNIST(args.data_dir, False, data_augmentations)
+    train_data = KMNIST(args.data_dir, True, train_transform)
+    test_data = KMNIST(args.data_dir, False, valid_transform)
   elif args.set == "K49":
-    train_data = K49(args.data_dir, True, data_augmentations)
-    test_data = K49(args.data_dir, False, data_augmentations)
+    train_data = K49(args.data_dir, True, train_transform)
+    test_data = K49(args.data_dir, False, valid_transform)
   else:
     raise ValueError("Unknown Dataset %s" % args.dataset)
 
@@ -136,6 +129,11 @@ def main():
   for epoch in range(args.epochs):
     scheduler.step()
     logging.info('epoch %d/%d lr %e', epoch, args.epochs, scheduler.get_lr()[0])
+
+    genotype = eval("core.genotypes.%s" % args.arch)
+    print('---------Genotype---------')
+    logging.info(genotype)
+    print('--------------------------') 
 
     model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
 
@@ -164,7 +162,7 @@ def train(train_queue, model, criterion, optimizer):
     loss = criterion(logits, target)
     if args.auxiliary:
       loss_aux = criterion(logits_aux, target)
-      loss += args.auxiliary_weight*loss_aux
+      loss += args.auxiliary_weight * loss_aux
     loss.backward()
     nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
     optimizer.step()
