@@ -99,19 +99,13 @@ def main():
       weight_decay=args.weight_decay)
 
   # Data augmentations
-  data_augmentations = args.data_aug
-  if data_augmentations is None:
-    data_augmentations = transforms.ToTensor()
-  elif isinstance(type(data_augmentations), list):
-    data_augmentations = transforms.Compose(data_augmentations)
-  elif not isinstance(data_augmentations, transforms.Compose):
-    raise NotImplementedError
+  train_transform, _ = utils.data_transforms_Kuzushiji(args)
   
   # Dataset
   if args.set == "KMNIST":
-    train_data = KMNIST(args.data_dir, True, data_augmentations)
+    train_data = KMNIST(args.data_dir, True, train_transform)
   elif args.set == "K49":
-    train_data = K49(args.data_dir, True, data_augmentations)
+    train_data = K49(args.data_dir, True, train_transform)
   else:
     raise ValueError("Unknown Dataset %s" % args.dataset)
 
