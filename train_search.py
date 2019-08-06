@@ -19,9 +19,9 @@ from models.model_search import Network
 from core.architect import Architect
 
 
-parser = argparse.ArgumentParser("kmnist")
+parser = argparse.ArgumentParser("kuzushiji")
 parser.add_argument('--data_dir', type=str, default='./data', help='location of the data corpus')
-parser.add_argument('--data_aug', type=str, default=None, help='Data Augmentation method')
+# parser.add_argument('--data_aug', type=str, default=None, help='Data Augmentation method')
 parser.add_argument('--set', type=str, default='KMNIST', help='The dataset to be trained')
 parser.add_argument('--batch_size', type=int, default=256, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.1, help='init learning rate')
@@ -36,7 +36,7 @@ parser.add_argument('--input_channels', type=int, default=1, help='num of input 
 parser.add_argument('--layers', type=int, default=8, help='total number of layers')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
-parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
+parser.add_argument('--cutout_length', type=int, default=6, help='cutout length')
 parser.add_argument('--drop_path_prob', type=float, default=0.3, help='drop path probability')
 parser.add_argument('--log_dir', type=str, default='./log', help='logging file location')
 parser.add_argument('--seed', type=int, default=2, help='random seed')
@@ -100,7 +100,6 @@ def main():
 
   # Data augmentations
   train_transform, _ = utils.data_transforms_Kuzushiji(args)
-  
   # Dataset
   if args.set == "KMNIST":
     train_data = KMNIST(args.data_dir, True, train_transform)
@@ -161,7 +160,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
 
-  for step, (input, target) in tqdm.tqdm(enumerate(train_queue)):
+  for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
     model.train()
     n = input.size(0)
     input = torch.tensor(input, requires_grad=False).cuda()
@@ -205,7 +204,7 @@ def infer(valid_queue, model, criterion):
   top1 = utils.AvgrageMeter()
   model.eval()
   with torch.no_grad():
-    for step, (input, target) in tqdm.tqdm(enumerate(valid_queue)):
+    for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
       #input = input.cuda()
       #target = target.cuda(non_blocking=True)
       input = torch.tensor(input, volatile=True).cuda()

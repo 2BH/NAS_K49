@@ -68,6 +68,7 @@ def data_transforms_Kuzushiji(args):
     raise NotImplementedError
 
   train_transform = transforms.Compose([
+    transforms.ToPILImage(),
     transforms.RandomCrop(28, padding=2),
     transforms.ToTensor(),
     transforms.Normalize(MEAN, STD),
