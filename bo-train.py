@@ -16,34 +16,33 @@ import torch.utils
 import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
-from models.model import KuzushijiNet as Network 
+from models.model import KuzushijiNet as Network
 from sklearn.metrics import balanced_accuracy_score
-
+from bohb.BOWorker import BOWorker
 
 parser = argparse.ArgumentParser("kuzushiji")
 parser.add_argument('--data_dir', type=str, default='./data', help='location of the data corpus')
 parser.add_argument('--weigthed_sample', action='store_true', default=False, help='Use weighted sampling')
 parser.add_argument('--set', type=str, default='KMNIST', help='The dataset to be trained')
 parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
 parser.add_argument('--report_freq', type=float, default=50, help='report frequency')
 parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
 parser.add_argument('--epochs', type=int, default=20, help='num of training epochs')
-parser.add_argument('--init_channels', type=int, default=16, help='num of init channels')
 parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
-parser.add_argument('--layers', type=int, default=12, help='total number of layers')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--auxiliary', action='store_true', default=False, help='use auxiliary tower')
 parser.add_argument('--auxiliary_weight', type=float, default=0.4, help='weight for auxiliary loss')
-parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
-parser.add_argument('--cutout_length', type=int, default=6, help='cutout length')
-parser.add_argument('--drop_path_prob', type=float, default=0.3, help='drop path probability')
 parser.add_argument('--log_dir', type=str, default='./log', help='logging file location')
 parser.add_argument('--seed', type=int, default=0, help='random seed')
 parser.add_argument('--arch', type=str, default='PCDARTS', help='which architecture to use')
-parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
+parser.add_argument('--grad_clip', type=int, default=5, help='gradient clipping')
+parser.add_argument('--min_budget', type=int, default=6, help='minimal budget')
+parser.add_argument('--max_budge', type=int, default=20, help='minimal budget')
+parser.add_argument('--n_iterations', type=int, default=12, help='number of iterations for BO optimizer')
+parser.add_argument('--train_portion', type=float, default=0.8, help='portion of training data')
+
 args = parser.parse_args()
 
 
@@ -57,8 +56,8 @@ timestamp = current_date.isoformat()
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)
 os.makedirs(log_path, exist_ok=True)
-log_name = "log_test_" + args.set + ".txt"
-log_dir = os.path.join(log_path, 'log_test_aux.txt')
+log_name = "log_bo_" + args.set + ".txt"
+log_dir = os.path.join(log_path, log_name)
 
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -91,20 +90,55 @@ def main():
 
   genotype = eval("core.genotypes.%s" % args.arch)
 
-  model = Network(args.init_channels, args.input_channels, num_classes, args.layers, args.auxiliary, genotype)
+  server = '127.0.0.1'
+  # start hpns server
+  NS = hpns.NameServer(run_id='example1', host=server, port=None)
+  NS.start()
+  # BOHB worker
+  worker = BOWorker(run_id='example1', train_func=train_func)
+  worker.run(background=True)
 
+  # BOHB optimizer
+  bohb = BOHB(configspace=worker.get_configspace(),
+              run_id='example1', nameserver=server,
+              min_budget=args.min_budget, max_budget=args.max_budget
+            )
+
+  res = bohb.run(n_iterations=args.n_iterations)
+
+  bohb.shutdown(shutdown_workers=True)
+  NS.shutdown()
+
+  result_file = os.path.join(self.logdir, 'bohb_result.pkl')
+
+  with open(result_file, 'wb') as f:
+    pickle.dump(res, f)
+
+
+def train_func(config, budget):
+  num_layers = config["num_layers"]
+  model_learning_rate = config["model_learning_rate"]
+  auxiliary_weight = config["auxiliary_weight"]
+  cutout_length = config["cutout_length"]
+  init_channel = config["init_channel"]
+  drop_path_prob = config["drop_path_prob"]
+  weight_decay = config["weight_decay"]
+
+  model = Network(init_channel, args.input_channels, num_classes, num_layers, args.auxiliary, genotype)
   model = model.cuda()
-
+  logging.info(config)
   logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
   criterion = nn.CrossEntropyLoss()
   criterion = criterion.cuda()
-  optimizer = torch.optim.SGD(
+  optimizer = torch.optim.Adam(
       model.parameters(),
-      args.learning_rate,
-      momentum=args.momentum,
-      weight_decay=args.weight_decay
+      model_learning_rate,
+      weight_decay=weight_decay
       )
+
+  # TODO: 
+  transform_config = 
 
   # Data augmentations
   train_transform, valid_transform = utils.data_transforms_Kuzushiji(args)
@@ -119,91 +153,46 @@ def main():
   else:
     raise ValueError("Unknown Dataset %s" % args.dataset)
 
+  # Train/Valid/Test split
+  num_train = len(train_data)
+  indices = list(range(num_train))
+  split = int(np.floor(args.train_portion * num_train))
+
   train_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=2)
+    train_data, batch_size=args.batch_size,
+    sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
+    pin_memory=True, num_workers=2)
 
   valid_queue = torch.utils.data.DataLoader(
+    train_data, batch_size=args.batch_size,
+    sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
+    pin_memory=True, num_workers=2)
+
+  test_queue = torch.utils.data.DataLoader(
       test_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
 
-  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs))
-  best_acc = 0.0
-  genotype = eval("core.genotypes.%s" % args.arch)
-  print('---------Genotype---------')
-  logging.info(genotype)
-  print('--------------------------') 
-  for epoch in range(args.epochs):
+  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(budget))
+
+  train_acc_lst, train_obj_lst = [], []
+
+  for epoch in range(budget):
     scheduler.step()
-    logging.info('epoch %d/%d lr %e', epoch+1, args.epochs, scheduler.get_lr()[0])
+    logging.info('epoch %d/%d (budget) lr %e', epoch+1, budget, scheduler.get_lr()[0])
 
+    model.drop_path_prob = drop_path_prob * epoch / budget
 
-    model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
-
+    # TODO: 
     train_acc, train_obj = train(train_queue, model, criterion, optimizer)
-    logging.info('train_acc %f', train_acc)
+    train_acc_lst.append(train_acc)
+    train_obj_lst.append(train_obj)
 
-    valid_acc, valid_obj = infer(valid_queue, model, criterion)
-    is_best = False
-    if valid_acc > best_acc:
-        best_acc = valid_acc
-        is_best = True
-    logging.info('valid_acc %f, best_acc %f', valid_acc, best_acc)
+    logging.info('(balanced)train_acc %f', train_acc)
 
-    utils.save_checkpoint({
-        'epoch': epoch + 1,
-        'state_dict': model.state_dict(),
-        'best_acc_top1': best_acc,
-        'optimizer' : optimizer.state_dict(),
-        }, is_best, log_path)
-
-  # Dataset
-  if args.set == "KMNIST":
-    train_data = KMNIST(args.data_dir, False, valid_transform)
-    test_data = KMNIST(args.data_dir, False, valid_transform)
-  elif args.set == "K49":
-    train_data = K49(args.data_dir, False, valid_transform)
-    test_data = K49(args.data_dir, False, valid_transform)
-  else:
-    raise ValueError("Unknown Dataset %s" % args.dataset)
-
-  train_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
-
-  valid_queue = torch.utils.data.DataLoader(
-      test_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
-
-
-  genotype = eval("core.genotypes.%s" % args.arch)
-  print('---------Genotype---------')
-  logging.info(genotype)
-  print('--------------------------') 
-
-  model.drop_path_prob = 0
-  train_prediction = []  
-  for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
-    input = torch.tensor(input).cuda()
-    target = torch.tensor(target).cuda(async=True)
-    logits = model(input)[0]
-    pred = logits.argmax(dim=-1)
-    train_prediction.extend(pred.tolist())
-
-  test_prediction = []
-  for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
-    input = torch.tensor(input).cuda()
-    target = torch.tensor(target).cuda(async=True)
-    logits = model(input)[0]
-    pred = logits.argmax(dim=-1)
-    test_prediction.extend(pred.tolist())
-
-  train_labels = train_data.labels
-  test_labels = test_data.labels
-
-  train_acc = np.sum(train_labels == train_prediction) / train_labels.shape[0]
-  test_acc = np.sum(test_labels == test_prediction) / test_labels.shape[0]
-  train_acc_bal = balanced_accuracy_score(train_labels, np.array(train_prediction))
-  test_acc_bal = balanced_accuracy_score(test_labels, np.array(test_prediction))
-
-  logging.info("(unbalanced) train acc: %f, valid acc: %f", train_acc, test_acc)
-  logging.info("(balanced) train acc: %f, valid acc: %f", train_acc_bal, test_acc_bal)
+  valid_acc, valid_obj = infer(valid_queue, model, criterion)
+  
+  logging.info('(balanced) valid_acc %f', valid_acc)
+  
+  return train_acc_lst, train_obj_lst, valid_acc, valid_obj
 
 
 def train(train_queue, model, criterion, optimizer):
@@ -257,6 +246,8 @@ def infer(valid_queue, model, criterion):
         logging.info('valid %03d %e %f', step, objs.avg, top1.avg)
 
   return top1.avg, objs.avg
+
+
 
 
 if __name__ == '__main__':

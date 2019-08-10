@@ -3,7 +3,7 @@ import os
 import requests
 import numpy as np
 from torch.utils.data import Dataset
-
+import copy
 
 class KMNIST(Dataset):
     """
@@ -144,3 +144,19 @@ class K49(Dataset):
                         fh.write(chunck)
             print('done')
         print('All files downloaded')
+
+    def split(self, train_transform, valid_trainsform, train_portion=1.):
+        train_data = copy.deepcopy(self)
+        valid_data = copy.deepcopy(self)
+        num_train = int(train_portion * self.images.shape[0])
+        num_valid = int((1 - train_portion) * self.images.shape[0])
+
+        train_data.images = self.images[:num_train]
+        valid_data.images = self.images[-num_valid:]
+        train_data.labels = self.labels[:num_train]
+        valid_data.labels = self.labels[-num_valid:]
+    
+        train_data.transform = train_transform
+        valid_data.transform = valid_trainsform
+
+        return train_data, valid_data

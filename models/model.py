@@ -82,10 +82,10 @@ class AuxiliaryHead(nn.Module):
     return x
 
 
-class NetworkKuzushiji(nn.Module):
+class KuzushijiNet(nn.Module):
 
   def __init__(self, C, C_input, num_classes, layers, auxiliary, genotype):
-    super(NetworkKuzushiji, self).__init__()
+    super(KuzushijiNet, self).__init__()
     self._layers = layers
     self._C_input = C_input
     self._auxiliary = auxiliary

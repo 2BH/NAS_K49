@@ -21,16 +21,16 @@ from core.architect import Architect
 
 parser = argparse.ArgumentParser("kuzushiji")
 parser.add_argument('--data_dir', type=str, default='./data', help='location of the data corpus')
-parser.add_argument('--weighted_sample', action='store_true', default=False, help='Use weighted sampling')
 parser.add_argument('--set', type=str, default='KMNIST', help='The dataset to be trained')
-parser.add_argument('--batch_size', type=int, default=256, help='batch size')
+parser.add_argument('--weigthed_sample', action='store_true', default=False, help='Use weighted sampling')
+parser.add_argument('--batch_size', type=int, default=512, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.1, help='init learning rate')
 parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
 parser.add_argument('--report_freq', type=float, default=50, help='report frequency')
 parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
-parser.add_argument('--epochs', type=int, default=50, help='num of training epochs')
+parser.add_argument('--epochs', type=int, default=20, help='num of training epochs')
 parser.add_argument('--init_channels', type=int, default=16, help='num of init channels')
 parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
 parser.add_argument('--layers', type=int, default=8, help='total number of layers')
@@ -55,7 +55,7 @@ timestamp = current_date.isoformat()
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)
 os.mkdir(log_path)
-log_dir = os.path.join(log_path, 'log.txt')
+log_dir = os.path.join(log_path, 'kmnist_log.txt')
 
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -64,13 +64,7 @@ fh = logging.FileHandler(log_dir)
 fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 
-
-if args.set == 'KMNIST':
-  num_classes = 10
-elif args.set == 'K49':
-  num_classes = 49
-else:
-  raise ValueError("Invalid dataset name %s" % args.set)
+num_classes = 10
 
 def main():
   if not torch.cuda.is_available():
@@ -100,51 +94,23 @@ def main():
 
   # Data augmentations
   train_transform, _ = utils.data_transforms_Kuzushiji(args)
-
-
   # Dataset
-  if args.set == "KMNIST":
-    train_data = KMNIST(args.data_dir, True, train_transform)
-  elif args.set == "K49":
-    train_data = K49(args.data_dir, True, train_transform)
-  else:
-    raise ValueError("Unknown Dataset %s" % args.dataset)
 
+  train_data = KMNIST(args.data_dir, True, train_transform)
 
-  if args.weighted_sample and args.set == "K49":
-    # Generate the weights for sampler
-    train_data, valid_data = train_data.split(train_transform, train_transform, args.train_portion)
-    train_weights = train_data.class_frequency[train_data.labels]
-    valid_weights = valid_data.class_frequency[valid_data.labels]
+  num_train = len(train_data)
+  indices = list(range(num_train))
+  split = int(np.floor(args.train_portion * num_train))
 
-    # enable weighted sampler
-    train_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size,
-      sampler=torch.utils.data.sampler.WeightedRandomSampler(weights=train_weights,
-                                                             num_samples=len(train_weights)),
-      pin_memory=True, num_workers=2)
+  train_queue = torch.utils.data.DataLoader(
+    train_data, batch_size=args.batch_size,
+    sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
+    pin_memory=True, num_workers=2)
 
-    valid_queue = torch.utils.data.DataLoader(
-      valid_data, batch_size=args.batch_size,
-      sampler=torch.utils.data.sampler.WeightedRandomSampler(weights=valid_weights,
-                                                             num_samples=len(valid_weights)),
-      pin_memory=True, num_workers=2)
-    
-  else:
-    num_train = len(train_data)
-    indices = list(range(num_train))
-    split = int(np.floor(args.train_portion * num_train))
-
-    # enable weighted sampler
-    train_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size,
-      sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-      pin_memory=True, num_workers=2)
-
-    valid_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size,
-      sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
-      pin_memory=True, num_workers=2)
+  valid_queue = torch.utils.data.DataLoader(
+    train_data, batch_size=args.batch_size,
+    sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
+    pin_memory=True, num_workers=2)
 
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
     optimizer, float(args.epochs), eta_min=args.learning_rate_min)
@@ -153,34 +119,47 @@ def main():
 
   # counting time
   t = 0
+  best_acc = 0.0
   for epoch in range(args.epochs):
     t1 = time.time()
     
     scheduler.step()
     lr = scheduler.get_lr()[0]
-    logging.info('epoch %d/%d lr %e', epoch+1, args.epochs, lr)
+    logging.info('epoch %d/%d lr %e', epoch, args.epochs, lr)
 
     # print the genotype
     genotype = model.genotype()
     logging.info('genotype = %s', genotype)
     
     # training
-    train_acc, train_obj = train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,epoch)
+    train_acc, train_obj = train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, epoch)
     t2 = time.time()
     t += t2 - t1
     logging.info('train_acc %f', train_acc)
 
     # validation
-    if args.epochs-epoch<=1:
-      valid_acc, valid_obj = infer(valid_queue, model, criterion)
-      logging.info('valid_acc %f', valid_acc)
+    valid_acc, valid_obj = infer(valid_queue, model, criterion)
+    logging.info('valid_acc %f', valid_acc)
     
-    utils.save(model, os.path.join(log_path, 'weights.pt'))
+    # save the state dict
+    is_best = False
+    if valid_acc > best_acc:
+        best_acc = valid_acc
+        is_best = True
+    logging.info('valid_acc %f, best_acc %f', valid_acc, best_acc)
+
+    utils.save_checkpoint({
+        'epoch': epoch + 1,
+        'state_dict': model.state_dict(),
+        'best_acc_top1': best_acc,
+        'optimizer' : optimizer.state_dict(),
+        }, is_best, log_path)
+
   t = t/60/60
   logging.info("Training time cost: %f" % t)
 
 
-def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,epoch):
+def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, epoch):
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
 
@@ -229,8 +208,6 @@ def infer(valid_queue, model, criterion):
   model.eval()
   with torch.no_grad():
     for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
-      #input = input.cuda()
-      #target = target.cuda(non_blocking=True)
       input = torch.tensor(input).cuda()
       target = torch.tensor(target).cuda(async=True)
       logits = model(input)
