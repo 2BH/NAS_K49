@@ -21,5 +21,6 @@ test_data = K49(data_dir, False, data_augmentations)
 
 # Generate the weights for sampler
 train_frequency = train_data.class_frequency[train_data.labels]
+test_frequency = test_data.class_frequency[test_data.labels]
 
-print(train_frequency.shape)
+print(test_data.class_frequency)

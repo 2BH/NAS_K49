@@ -37,7 +37,6 @@ parser.add_argument('--layers', type=int, default=8, help='total number of layer
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
 parser.add_argument('--cutout_length', type=int, default=6, help='cutout length')
-parser.add_argument('--drop_path_prob', type=float, default=0.3, help='drop path probability')
 parser.add_argument('--log_dir', type=str, default='./log', help='logging file location')
 parser.add_argument('--seed', type=int, default=2, help='random seed')
 parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
@@ -92,10 +91,10 @@ def main():
   model = model.cuda()
   logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
-  optimizer = torch.optim.SGD(
+  optimizer = torch.optim.AdamW(
       model.parameters(),
       args.learning_rate,
-      momentum=args.momentum,
+      # momentum=args.momentum,
       weight_decay=args.weight_decay)
 
   # Data augmentations
@@ -114,8 +113,8 @@ def main():
   if args.weighted_sample and args.set == "K49":
     # Generate the weights for sampler
     train_data, valid_data = train_data.split(train_transform, train_transform, args.train_portion)
-    train_weights = train_data.class_frequency[train_data.labels]
-    valid_weights = valid_data.class_frequency[valid_data.labels]
+    train_weights = 1 / train_data.class_frequency[train_data.labels]
+    valid_weights = 1 / valid_data.class_frequency[valid_data.labels]
 
     # enable weighted sampler
     train_queue = torch.utils.data.DataLoader(
@@ -187,20 +186,17 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
   for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
     model.train()
     n = input.size(0)
-    input = torch.tensor(input, requires_grad=False).cuda()
-    target = torch.tensor(target, requires_grad=False).cuda(async=True)
+    input = input.cuda()
+    target = target.cuda(async=True)
 
-    # get a random minibatch from the search queue with replacement
-    # input_search, target_search = next(iter(valid_queue))
-    
     try:
       input_search, target_search = next(valid_queue_iter)
     except:
       valid_queue_iter = iter(valid_queue)
       input_search, target_search = next(valid_queue_iter)
     
-    input_search = torch.tensor(input_search, requires_grad=False).cuda()
-    target_search = torch.tensor(target_search, requires_grad=False).cuda(async=True)
+    input_search = input_search.cuda()
+    target_search = target_search.cuda(async=True)
 
     if epoch >= 10:
       architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
@@ -229,10 +225,8 @@ def infer(valid_queue, model, criterion):
   model.eval()
   with torch.no_grad():
     for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
-      #input = input.cuda()
-      #target = target.cuda(non_blocking=True)
-      input = torch.tensor(input).cuda()
-      target = torch.tensor(target).cuda(async=True)
+      input = input.cuda()
+      target = target.cuda(async=True)
       logits = model(input)
       loss = criterion(logits, target)
 

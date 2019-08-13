@@ -148,13 +148,15 @@ class K49(Dataset):
     def split(self, train_transform, valid_trainsform, train_portion=1.):
         train_data = copy.deepcopy(self)
         valid_data = copy.deepcopy(self)
+        indices = np.arange(self.images.shape[0])
+        np.random.shuffle(indices)
         num_train = int(train_portion * self.images.shape[0])
         num_valid = int((1 - train_portion) * self.images.shape[0])
 
-        train_data.images = self.images[:num_train]
-        valid_data.images = self.images[-num_valid:]
-        train_data.labels = self.labels[:num_train]
-        valid_data.labels = self.labels[-num_valid:]
+        train_data.images = self.images[indices[:num_train]]
+        valid_data.images = self.images[indices[-num_valid:]]
+        train_data.labels = self.labels[indices[:num_train]]
+        valid_data.labels = self.labels[indices[-num_valid:]]
     
         train_data.transform = train_transform
         valid_data.transform = valid_trainsform

@@ -22,10 +22,11 @@ from sklearn.metrics import balanced_accuracy_score
 
 parser = argparse.ArgumentParser("kuzushiji")
 parser.add_argument('--data_dir', type=str, default='./data', help='location of the data corpus')
-parser.add_argument('--weigthed_sample', action='store_true', default=False, help='Use weighted sampling')
+parser.add_argument('--weighted_sample', action='store_true', default=False, help='Use weighted sampling')
 parser.add_argument('--set', type=str, default='KMNIST', help='The dataset to be trained')
 parser.add_argument('--batch_size', type=int, default=256, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
+parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
 parser.add_argument('--report_freq', type=float, default=50, help='report frequency')
@@ -33,7 +34,7 @@ parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
 parser.add_argument('--epochs', type=int, default=20, help='num of training epochs')
 parser.add_argument('--init_channels', type=int, default=16, help='num of init channels')
 parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
-parser.add_argument('--layers', type=int, default=12, help='total number of layers')
+parser.add_argument('--layers', type=int, default=8, help='total number of layers')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--auxiliary', action='store_true', default=False, help='use auxiliary tower')
 parser.add_argument('--auxiliary_weight', type=float, default=0.4, help='weight for auxiliary loss')
@@ -99,13 +100,12 @@ def main():
 
   criterion = nn.CrossEntropyLoss()
   criterion = criterion.cuda()
-  optimizer = torch.optim.SGD(
-      model.parameters(),
-      args.learning_rate,
-      momentum=args.momentum,
-      weight_decay=args.weight_decay
-      )
-
+  optimizer = torch.optim.AdamW(
+    model.parameters(),
+    args.learning_rate,
+    # momentum=args.momentum,
+    weight_decay=args.weight_decay
+    )
   # Data augmentations
   train_transform, valid_transform = utils.data_transforms_Kuzushiji(args)
   
@@ -119,13 +119,30 @@ def main():
   else:
     raise ValueError("Unknown Dataset %s" % args.dataset)
 
-  train_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=2)
+  if args.weighted_sample and args.set == "K49":
+    # enable weighted sampler
 
-  valid_queue = torch.utils.data.DataLoader(
-      test_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
+    train_weights = 1 / train_data.class_frequency[train_data.labels]
+    train_queue = torch.utils.data.DataLoader(
+      train_data, batch_size=args.batch_size,
+      sampler=torch.utils.data.sampler.WeightedRandomSampler(weights=train_weights,
+                                                             num_samples=len(train_weights)),
+      pin_memory=True, num_workers=2)
 
-  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs))
+    valid_queue = torch.utils.data.DataLoader(
+      test_data, batch_size=args.batch_size,
+      pin_memory=True, num_workers=2)
+  else:
+    train_queue = torch.utils.data.DataLoader(
+      train_data, batch_size=args.batch_size, shuffle=True,
+      pin_memory=True, num_workers=2)
+
+    valid_queue = torch.utils.data.DataLoader(
+      test_data, batch_size=args.batch_size,
+      pin_memory=True, num_workers=2)
+  
+  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer, float(args.epochs), eta_min=args.learning_rate_min)
   best_acc = 0.0
   genotype = eval("core.genotypes.%s" % args.arch)
   print('---------Genotype---------')
@@ -140,13 +157,13 @@ def main():
 
     train_acc, train_obj = train(train_queue, model, criterion, optimizer)
     logging.info('train_acc %f', train_acc)
-
+    
     valid_acc, valid_obj = infer(valid_queue, model, criterion)
     is_best = False
     if valid_acc > best_acc:
         best_acc = valid_acc
         is_best = True
-    logging.info('valid_acc %f, best_acc %f', valid_acc, best_acc)
+    logging.info('(unbalanced) valid_acc %f, best_acc %f', valid_acc, best_acc)
 
     utils.save_checkpoint({
         'epoch': epoch + 1,
@@ -157,39 +174,36 @@ def main():
 
   # Dataset
   if args.set == "KMNIST":
-    train_data = KMNIST(args.data_dir, False, valid_transform)
+    train_data = KMNIST(args.data_dir, True, valid_transform)
     test_data = KMNIST(args.data_dir, False, valid_transform)
   elif args.set == "K49":
-    train_data = K49(args.data_dir, False, valid_transform)
+    train_data = K49(args.data_dir, True, valid_transform)
     test_data = K49(args.data_dir, False, valid_transform)
   else:
     raise ValueError("Unknown Dataset %s" % args.dataset)
-
+  
   train_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
+      train_data, batch_size=args.batch_size, shuffle=False,
+      pin_memory=True, num_workers=2)
 
   valid_queue = torch.utils.data.DataLoader(
-      test_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
+      test_data, batch_size=args.batch_size, shuffle=False,
+      pin_memory=True, num_workers=2)
+  
 
-
-  genotype = eval("core.genotypes.%s" % args.arch)
-  print('---------Genotype---------')
-  logging.info(genotype)
-  print('--------------------------') 
-
-  model.drop_path_prob = 0
+  model.eval()
   train_prediction = []  
   for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
-    input = torch.tensor(input).cuda()
-    target = torch.tensor(target).cuda(async=True)
+    input = input.cuda()
+    target = target.cuda(async=True)
     logits = model(input)[0]
     pred = logits.argmax(dim=-1)
     train_prediction.extend(pred.tolist())
 
   test_prediction = []
   for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
-    input = torch.tensor(input).cuda()
-    target = torch.tensor(target).cuda(async=True)
+    input = input.cuda()
+    target = target.cuda(async=True)
     logits = model(input)[0]
     pred = logits.argmax(dim=-1)
     test_prediction.extend(pred.tolist())
@@ -212,8 +226,8 @@ def train(train_queue, model, criterion, optimizer):
   model.train()
 
   for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
-    input = torch.tensor(input).cuda()
-    target = torch.tensor(target).cuda(async=True)
+    input = input.cuda()
+    target = target.cuda(async=True)
 
     optimizer.zero_grad()
     logits, logits_aux = model(input)
@@ -242,8 +256,8 @@ def infer(valid_queue, model, criterion):
   model.eval()
   with torch.no_grad():
     for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
-      input = torch.tensor(input).cuda()
-      target = torch.tensor(target).cuda(async=True)
+      input = input.cuda()
+      target = target.cuda(async=True)
 
       logits, _ = model(input)
       loss = criterion(logits, target)
