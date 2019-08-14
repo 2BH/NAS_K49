@@ -155,7 +155,6 @@ def main():
   for epoch in range(args.epochs):
     t1 = time.time()
     
-    scheduler.step()
     lr = scheduler.get_lr()[0]
     logging.info('epoch %d/%d lr %e', epoch+1, args.epochs, lr)
 
@@ -174,6 +173,8 @@ def main():
       valid_acc, valid_obj = infer(valid_queue, model, criterion)
       logging.info('valid_acc %f', valid_acc)
     
+    scheduler.step()
+
     utils.save(model, os.path.join(log_path, 'weights.pt'))
   t = t/60/60
   logging.info("Training time cost: %f" % t)
@@ -187,7 +188,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
     model.train()
     n = input.size(0)
     input = input.cuda()
-    target = target.cuda(async=True)
+    target = target.cuda()
 
     try:
       input_search, target_search = next(valid_queue_iter)
@@ -196,7 +197,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
       input_search, target_search = next(valid_queue_iter)
     
     input_search = input_search.cuda()
-    target_search = target_search.cuda(async=True)
+    target_search = target_search.cuda()
 
     if epoch >= 10:
       architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
@@ -226,7 +227,7 @@ def infer(valid_queue, model, criterion):
   with torch.no_grad():
     for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
       input = input.cuda()
-      target = target.cuda(async=True)
+      target = target.cuda()
       logits = model(input)
       loss = criterion(logits, target)
 

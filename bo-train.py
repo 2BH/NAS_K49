@@ -74,6 +74,36 @@ elif args.set == 'K49':
 else:
   raise ValueError("Invalid dataset name %s" % args.set)
 
+# Create dataset
+train_transform, valid_transform = utils.data_transforms_Kuzushiji(args)
+
+if args.set == "KMNIST":
+  train_data = KMNIST(args.data_dir, True, train_transform)
+  test_data = KMNIST(args.data_dir, False, valid_transform)
+elif args.set == "K49":
+  train_data = K49(args.data_dir, True, train_transform)
+  test_data = K49(args.data_dir, False, valid_transform)
+else:
+  raise ValueError("Unknown Dataset %s" % args.dataset)
+
+# Train/Valid/Test split
+num_train = len(train_data)
+indices = list(range(num_train))
+split = int(np.floor(args.train_portion * num_train))
+
+train_queue = torch.utils.data.DataLoader(
+  train_data, batch_size=args.batch_size,
+  sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
+  pin_memory=True, num_workers=2)
+
+valid_queue = torch.utils.data.DataLoader(
+  train_data, batch_size=args.batch_size,
+  sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
+  pin_memory=True, num_workers=2)
+
+test_queue = torch.utils.data.DataLoader(
+    test_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
+
 def main():
   if not torch.cuda.is_available():
     logging.info('no gpu device available')
@@ -115,6 +145,7 @@ def main():
     pickle.dump(res, f)
 
 
+
 def train_func(config, budget):
   num_layers = config["num_layers"]
   model_learning_rate = config["model_learning_rate"]
@@ -131,45 +162,14 @@ def train_func(config, budget):
 
   criterion = nn.CrossEntropyLoss()
   criterion = criterion.cuda()
-  optimizer = torch.optim.Adam(
+  optimizer = torch.optim.AdamW(
       model.parameters(),
       model_learning_rate,
       weight_decay=weight_decay
       )
 
-  # TODO: 
-  transform_config = 
 
-  # Data augmentations
-  train_transform, valid_transform = utils.data_transforms_Kuzushiji(args)
-  
-  # Dataset
-  if args.set == "KMNIST":
-    train_data = KMNIST(args.data_dir, True, train_transform)
-    test_data = KMNIST(args.data_dir, False, valid_transform)
-  elif args.set == "K49":
-    train_data = K49(args.data_dir, True, train_transform)
-    test_data = K49(args.data_dir, False, valid_transform)
-  else:
-    raise ValueError("Unknown Dataset %s" % args.dataset)
 
-  # Train/Valid/Test split
-  num_train = len(train_data)
-  indices = list(range(num_train))
-  split = int(np.floor(args.train_portion * num_train))
-
-  train_queue = torch.utils.data.DataLoader(
-    train_data, batch_size=args.batch_size,
-    sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-    pin_memory=True, num_workers=2)
-
-  valid_queue = torch.utils.data.DataLoader(
-    train_data, batch_size=args.batch_size,
-    sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-    pin_memory=True, num_workers=2)
-
-  test_queue = torch.utils.data.DataLoader(
-      test_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
 
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(budget))
 
@@ -203,7 +203,7 @@ def train(train_queue, model, criterion, optimizer):
 
   for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
     input = torch.tensor(input).cuda()
-    target = torch.tensor(target).cuda(async=True)
+    target = torch.tensor(target).cuda()
 
     optimizer.zero_grad()
     logits, logits_aux = model(input)
@@ -233,7 +233,7 @@ def infer(valid_queue, model, criterion):
   with torch.no_grad():
     for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
       input = torch.tensor(input).cuda()
-      target = torch.tensor(target).cuda(async=True)
+      target = torch.tensor(target).cuda()
 
       logits, _ = model(input)
       loss = criterion(logits, target)

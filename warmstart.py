@@ -167,7 +167,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
     model.train()
     n = input.size(0)
     input = torch.tensor(input, requires_grad=False).cuda()
-    target = torch.tensor(target, requires_grad=False).cuda(async=True)
+    target = torch.tensor(target, requires_grad=False).cuda()
 
     # get a random minibatch from the search queue with replacement
     # input_search, target_search = next(iter(valid_queue))
@@ -179,7 +179,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
       input_search, target_search = next(valid_queue_iter)
     
     input_search = torch.tensor(input_search, requires_grad=False).cuda()
-    target_search = torch.tensor(target_search, requires_grad=False).cuda(async=True)
+    target_search = torch.tensor(target_search, requires_grad=False).cuda()
 
     if epoch >= 10:
       architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
@@ -209,7 +209,7 @@ def infer(valid_queue, model, criterion):
   with torch.no_grad():
     for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
       input = torch.tensor(input).cuda()
-      target = torch.tensor(target).cuda(async=True)
+      target = torch.tensor(target).cuda()
       logits = model(input)
       loss = criterion(logits, target)
 

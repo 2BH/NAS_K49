@@ -26,7 +26,7 @@ parser.add_argument('--batch_size', type=int, default=128, help='batch size')
 parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
 parser.add_argument('--init_channels', type=int, default=16, help='num of init channels')
 parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
-parser.add_argument('--layers', type=int, default=12, help='total number of layers')
+parser.add_argument('--layers', type=int, default=8, help='total number of layers')
 parser.add_argument('--log_dir', type=str, default='./log', help='logging file location')
 parser.add_argument('--seed', type=int, default=0, help='random seed')
 parser.add_argument('--arch', type=str, default='PCDARTS', help='which architecture to use')
@@ -39,7 +39,7 @@ args = parser.parse_args()
 os.makedirs(args.log_dir, exist_ok=True)
 os.makedirs(args.data_dir, exist_ok=True)
 
-timestamp = "2019-08-09T23:44:42.116939"
+timestamp = "2019-08-13T22:11:01.151018"
 
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)
@@ -80,7 +80,7 @@ def main():
   model = Network(args.init_channels, args.input_channels, num_classes, args.layers, True, genotype)
   # model = nn.DataParallel(model)
   model = model.cuda()
-  model.drop_path_prob = 0
+
   # load model
   checkpoint = torch.load(log_path+'/checkpoint.pth.tar')
   model.load_state_dict(checkpoint['state_dict'])
@@ -112,21 +112,25 @@ def main():
   logging.info(genotype)
   print('--------------------------') 
 
-  train_prediction = []  
-  for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
-    input = torch.tensor(input).cuda()
-    target = torch.tensor(target).cuda(async=True)
-    logits = model(input)[0]
-    pred = logits.argmax(dim=-1)
-    train_prediction.extend(pred.tolist())
-
+  model.drop_path_prob = 0.
+  model.eval()
+  train_prediction = []
   test_prediction = []
-  for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
-    input = torch.tensor(input).cuda()
-    target = torch.tensor(target).cuda(async=True)
-    logits = model(input)[0]
-    pred = logits.argmax(dim=-1)
-    test_prediction.extend(pred.tolist())
+  with torch.no_grad():  
+    for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
+      input = input.cuda()
+      target = target.cuda()
+      logits = model(input)[0]
+      pred = logits.argmax(dim=-1)
+      train_prediction.extend(pred.tolist())
+
+
+    for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
+      input = input.cuda()
+      target = target.cuda()
+      logits = model(input)[0]
+      pred = logits.argmax(dim=-1)
+      test_prediction.extend(pred.tolist())
 
   train_labels = train_data.labels
   test_labels = test_data.labels

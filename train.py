@@ -149,7 +149,7 @@ def main():
   logging.info(genotype)
   print('--------------------------') 
   for epoch in range(args.epochs):
-    scheduler.step()
+
     logging.info('epoch %d/%d lr %e', epoch+1, args.epochs, scheduler.get_lr()[0])
 
 
@@ -164,7 +164,7 @@ def main():
         best_acc = valid_acc
         is_best = True
     logging.info('(unbalanced) valid_acc %f, best_acc %f', valid_acc, best_acc)
-
+    scheduler.step()
     utils.save_checkpoint({
         'epoch': epoch + 1,
         'state_dict': model.state_dict(),
@@ -195,7 +195,7 @@ def main():
   train_prediction = []  
   for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
     input = input.cuda()
-    target = target.cuda(async=True)
+    target = target.cuda()
     logits = model(input)[0]
     pred = logits.argmax(dim=-1)
     train_prediction.extend(pred.tolist())
@@ -203,7 +203,7 @@ def main():
   test_prediction = []
   for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
     input = input.cuda()
-    target = target.cuda(async=True)
+    target = target.cuda()
     logits = model(input)[0]
     pred = logits.argmax(dim=-1)
     test_prediction.extend(pred.tolist())
@@ -227,7 +227,7 @@ def train(train_queue, model, criterion, optimizer):
 
   for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
     input = input.cuda()
-    target = target.cuda(async=True)
+    target = target.cuda()
 
     optimizer.zero_grad()
     logits, logits_aux = model(input)
@@ -257,7 +257,7 @@ def infer(valid_queue, model, criterion):
   with torch.no_grad():
     for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
       input = input.cuda()
-      target = target.cuda(async=True)
+      target = target.cuda()
 
       logits, _ = model(input)
       loss = criterion(logits, target)
