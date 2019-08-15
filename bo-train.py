@@ -104,6 +104,7 @@ valid_queue = torch.utils.data.DataLoader(
 test_queue = torch.utils.data.DataLoader(
     test_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
 
+
 def main():
   if not torch.cuda.is_available():
     logging.info('no gpu device available')
@@ -167,9 +168,6 @@ def train_func(config, budget):
       model_learning_rate,
       weight_decay=weight_decay
       )
-
-
-
 
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(budget))
 
