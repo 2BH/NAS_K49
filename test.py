@@ -39,7 +39,7 @@ args = parser.parse_args()
 os.makedirs(args.log_dir, exist_ok=True)
 os.makedirs(args.data_dir, exist_ok=True)
 
-timestamp = "2019-08-14T15:33:01.917365"
+timestamp = "2019-08-21T01:28:48.829169"
 
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)

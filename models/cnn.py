@@ -6,7 +6,6 @@ from tqdm import tqdm
 
 from utils.utils import AvgrageMeter, accuracy
 
-
 class torchModel(nn.Module):
     def __init__(self, config, input_shape=(1, 28, 28), num_classes=10):
         super(torchModel, self).__init__()
@@ -16,6 +15,8 @@ class torchModel(nn.Module):
         kernel_size = 2
         in_channels = input_shape[0]
         out_channels = 4
+        # for fair comparison
+        self.dropout_prob = 0.2
 
         for i in range(n_conv_layers):
             c = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,
@@ -40,7 +41,7 @@ class torchModel(nn.Module):
             n_out /= 2
 
         self.last_fc = nn.Linear(int(n_in), self.output_size)
-        self.dropout = nn.Dropout(p=0.2)
+        self.dropout = nn.Dropout(p=self.dropout_prob)
 
     # generate input sample and forward to get shape
     def _get_conv_output(self, shape):
@@ -58,61 +59,4 @@ class torchModel(nn.Module):
         x = self.last_fc(x)
         return x
 
-    def train_fn(self, optimizer, criterion, loader, device, train=True):
-        """
-        Training method
-        :param optimizer: optimization algorithm
-        :criterion: loss function
-        :param loader: data loader for either training or testing set
-        :param device: torch device
-        :param train: boolean to indicate if training or test set is used
-        :return: (accuracy, loss) on the data
-        """
-        score = AvgrageMeter()
-        objs = AvgrageMeter()
-        self.train()
-
-        t = tqdm(loader)
-        for images, labels in t:
-            images = images.to(device)
-            labels = labels.to(device)
-            optimizer.zero_grad()
-            logits = self(images)
-            loss = criterion(logits, labels)
-            loss.backward()
-            optimizer.step()
-
-            acc, _ = accuracy(logits, labels, topk=(1, 5))
-            n = images.size(0)
-            objs.update(loss.item(), n)
-            score.update(acc.item(), n)
-
-            t.set_description('(=> Training) Loss: {:.4f}'.format(objs.avg))
-
-        return score.avg, objs.avg
-
-    def eval_fn(self, loader, device, train=False):
-        """
-        Evaluation method
-        :param loader: data loader for either training or testing set
-        :param device: torch device
-        :param train: boolean to indicate if training or test set is used
-        :return: accuracy on the data
-        """
-        score = AvgrageMeter()
-        self.eval()
-
-        t = tqdm(loader)
-        with torch.no_grad():  # no gradient needed
-            for images, labels in t:
-                images = images.to(device)
-                labels = labels.to(device)
-
-                outputs = self(images)
-                acc, _ = accuracy(outputs, labels, topk=(1, 5))
-                score.update(acc.item(), images.size(0))
-
-                t.set_description('(=> Test) Score: {:.4f}'.format(score.avg))
-
-        return score.avg
-
+    

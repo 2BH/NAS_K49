@@ -35,6 +35,7 @@ parser.add_argument('--epochs', type=int, default=20, help='num of training epoc
 parser.add_argument('--init_channels', type=int, default=16, help='num of init channels')
 parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
 parser.add_argument('--layers', type=int, default=8, help='total number of layers')
+parser.add_argument('--optimizer', type=str, default='Adam', help='Type of optimizer to use')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--auxiliary', action='store_true', default=False, help='use auxiliary tower')
 parser.add_argument('--auxiliary_weight', type=float, default=0.4, help='weight for auxiliary loss')
@@ -100,12 +101,20 @@ def main():
 
   criterion = nn.CrossEntropyLoss()
   criterion = criterion.cuda()
-  optimizer = torch.optim.AdamW(
-    model.parameters(),
-    args.learning_rate,
-    # momentum=args.momentum,
-    weight_decay=args.weight_decay
-    )
+  if args.optimizer == "Adam":
+    optimizer = torch.optim.Adam(
+      model.parameters(),
+      args.learning_rate,
+      # momentum=args.momentum,
+      weight_decay=args.weight_decay
+      )
+  else:
+    optimizer = torch.optim.AdamW(
+      model.parameters(),
+      args.learning_rate,
+      # momentum=args.momentum,
+      weight_decay=args.weight_decay
+      )
   # Data augmentations
   train_transform, valid_transform = utils.data_transforms_Kuzushiji(args)
   

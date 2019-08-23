@@ -44,6 +44,7 @@ parser.add_argument('--train_portion', type=float, default=0.5, help='portion of
 parser.add_argument('--unrolled', action='store_true', default=False, help='use one-step unrolled validation loss')
 parser.add_argument('--arch_learning_rate', type=float, default=6e-4, help='learning rate for arch encoding')
 parser.add_argument('--arch_weight_decay', type=float, default=1e-3, help='weight decay for arch encoding')
+
 args = parser.parse_args()
 
 os.makedirs(args.log_dir, exist_ok=True)
@@ -94,11 +95,10 @@ def main():
   optimizer = torch.optim.AdamW(
       model.parameters(),
       args.learning_rate,
-      # momentum=args.momentum,
       weight_decay=args.weight_decay)
 
   # Data augmentations
-  train_transform, _ = utils.data_transforms_Kuzushiji(args)
+  train_transform, valid_trainsform = utils.data_transforms_Kuzushiji(args)
 
 
   # Dataset
@@ -112,7 +112,7 @@ def main():
 
   if args.weighted_sample and args.set == "K49":
     # Generate the weights for sampler
-    train_data, valid_data = train_data.split(train_transform, train_transform, args.train_portion)
+    train_data, valid_data = train_data.split(train_transform, valid_trainsform, args.train_portion)
     train_weights = 1 / train_data.class_frequency[train_data.labels]
     valid_weights = 1 / valid_data.class_frequency[valid_data.labels]
 
