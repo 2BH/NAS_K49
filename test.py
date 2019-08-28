@@ -39,7 +39,7 @@ args = parser.parse_args()
 os.makedirs(args.log_dir, exist_ok=True)
 os.makedirs(args.data_dir, exist_ok=True)
 
-timestamp = "2019-08-21T01:28:48.829169"
+timestamp = "2019-08-27T20:13:09.223281"
 
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)
@@ -92,10 +92,10 @@ def main():
   
   # Dataset
   if args.set == "KMNIST":
-    train_data = KMNIST(args.data_dir, False, valid_transform)
+    train_data = KMNIST(args.data_dir, True, valid_transform)
     test_data = KMNIST(args.data_dir, False, valid_transform)
   elif args.set == "K49":
-    train_data = K49(args.data_dir, False, valid_transform)
+    train_data = K49(args.data_dir, True, valid_transform)
     test_data = K49(args.data_dir, False, valid_transform)
   else:
     raise ValueError("Unknown Dataset %s" % args.dataset)

@@ -36,8 +36,8 @@ parser.add_argument('--log_dir', type=str, default='./log', help='logging file l
 parser.add_argument('--seed', type=int, default=0, help='random seed')
 parser.add_argument('--arch', type=str, default='PCDARTS', help='which architecture to use')
 parser.add_argument('--grad_clip', type=int, default=5, help='gradient clipping')
-parser.add_argument('--min_budget', type=int, default=4, help='minimal budget')
-parser.add_argument('--max_budget', type=int, default=10, help='minimal budget')
+parser.add_argument('--min_budget', type=int, default=3, help='minimal budget')
+parser.add_argument('--max_budget', type=int, default=9, help='maximal budget')
 parser.add_argument('--n_iterations', type=int, default=15, help='number of iterations for BO optimizer')
 parser.add_argument('--train_portion', type=float, default=0.8, help='portion of training data')
 parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
@@ -129,7 +129,8 @@ test_queue = torch.utils.data.DataLoader(
     test_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
 
 opti_dict = {'Adam': torch.optim.Adam,
-                'AdamW': torch.optim.AdamW}
+             'AdamW': torch.optim.AdamW,
+             'sgd': torch.optim.SGD}
 
 
 def main():
