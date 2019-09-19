@@ -156,7 +156,9 @@ def main():
   genotype = eval("core.genotypes.%s" % args.arch)
   print('---------Genotype---------')
   logging.info(genotype)
-  print('--------------------------') 
+  print('--------------------------')
+  train_acc_lst = []
+  valid_acc_lst = []
   for epoch in range(args.epochs):
 
     logging.info('epoch %d/%d lr %e', epoch+1, args.epochs, scheduler.get_lr()[0])
@@ -166,8 +168,9 @@ def main():
 
     train_acc, train_obj = train(train_queue, model, criterion, optimizer)
     logging.info('train_acc %f', train_acc)
-    
+    train_acc_lst.append(train_acc)
     valid_acc, valid_obj = infer(valid_queue, model, criterion)
+    valid_acc_lst.append(valid_acc)
     is_best = False
     if valid_acc > best_acc:
         best_acc = valid_acc
@@ -180,6 +183,11 @@ def main():
         'best_acc_top1': best_acc,
         'optimizer' : optimizer.state_dict(),
         }, is_best, log_path)
+        
+  logging.info("train acc")
+  logging.info(train_acc_lst)
+  logging.info("valid acc")
+  logging.info(valid_acc_lst)
 
   # Dataset
   if args.set == "KMNIST":
@@ -253,8 +261,8 @@ def train(train_queue, model, criterion, optimizer):
     objs.update(loss.data, n)
     top1.update(prec1.data, n)
 
-    if step % args.report_freq == 0:
-      logging.info('train %03d %e %f', step, objs.avg, top1.avg)
+    #if step % args.report_freq == 0:
+    #  logging.info('train %03d %e %f', step, objs.avg, top1.avg)
 
   return top1.avg, objs.avg
 

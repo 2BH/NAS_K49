@@ -7,6 +7,7 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torchsummary import summary
+import torch.backends.cudnn as cudnn
 
 from models.cnn_default import torchModel
 from utils.datasets import K49
@@ -14,7 +15,7 @@ from utils.datasets import K49
 
 def main(model_config,
          data_dir,
-         num_epochs=10,
+         num_epochs=20,
          batch_size=50,
          learning_rate=0.001,
          train_criterion=torch.nn.CrossEntropyLoss,
@@ -81,16 +82,35 @@ def main(model_config,
             device='cuda' if torch.cuda.is_available() else 'cpu')
 
     # Train the model
+    train_score_lst = []
+    test_score_lst = []
+    train_acc_bal_lst = []
+    test_acc_bal_lst = []
     for epoch in range(num_epochs):
         logging.info('#' * 50)
         logging.info('Epoch [{}/{}]'.format(epoch + 1, num_epochs))
 
-        train_score, train_loss = model.train_fn(optimizer, train_criterion,
+        train_score, train_loss, train_acc_bal = model.train_fn(optimizer, train_criterion,
                                               train_loader, device)
         logging.info('Train accuracy %f', train_score)
 
-        test_score = model.eval_fn(test_loader, device)
+        test_score, test_acc_bal = model.eval_fn(test_loader, device)
         logging.info('Test accuracy %f', test_score)
+
+        train_score_lst.append(train_score)
+        test_score_lst.append(test_score)
+        train_acc_bal_lst.append(train_acc_bal)
+        test_acc_bal_lst.append(test_acc_bal)
+
+    logging.info("train accuracy")
+    logging.info(train_score_lst)
+    logging.info("test accuracy")
+    logging.info(test_score_lst)
+    logging.info("(balanced accuracy) train accuracy")
+    logging.info(train_acc_bal_lst)
+    logging.info("(balanced accuracy) test accuracy")
+    logging.info(test_acc_bal_lst)
+
 
     if save_model_str:
         # Save the model checkpoint can be restored via "model = torch.load(save_model_str)"
@@ -113,7 +133,7 @@ if __name__ == '__main__':
     cmdline_parser = argparse.ArgumentParser('AutoML SS19 final project')
 
     cmdline_parser.add_argument('-e', '--epochs',
-                                default=10,
+                                default=20,
                                 help='Number of epochs',
                                 type=int)
     cmdline_parser.add_argument('-b', '--batch_size',
@@ -121,7 +141,7 @@ if __name__ == '__main__':
                                 help='Batch size',
                                 type=int)
     cmdline_parser.add_argument('-D', '--data_dir',
-                                default='../data',
+                                default='./data',
                                 help='Directory in which the data is stored (can be downloaded)')
     cmdline_parser.add_argument('-l', '--learning_rate',
                                 default=0.01,
@@ -141,6 +161,10 @@ if __name__ == '__main__':
                                 default=None,
                                 help='Path to store model',
                                 type=str)
+    cmdline_parser.add_argument('-s', '--seed',
+                                default=0,
+                                help='Random seed',
+                                type=int)
     cmdline_parser.add_argument('-v', '--verbose',
                                 default='INFO',
                                 choices=['INFO', 'DEBUG'],
@@ -159,6 +183,12 @@ if __name__ == '__main__':
             'n_layers': 1,
         }
 
+    np.random.seed(args.seed)
+    torch.cuda.set_device(0)
+    cudnn.benchmark = True
+    torch.manual_seed(args.seed)
+    cudnn.enabled=True
+    torch.cuda.manual_seed(args.seed)
     main(
         architecture,
         data_dir=args.data_dir,

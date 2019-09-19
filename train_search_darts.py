@@ -15,13 +15,14 @@ import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 from utils.datasets import KMNIST, K49
 
-from models.model_search import Network
-from core.architect import Architect
+from models.model_search_DARTS import Network
+from core.architect_DARTS import Architect
 
 
 parser = argparse.ArgumentParser("kuzushiji")
 parser.add_argument('--data_dir', type=str, default='./data', help='location of the data corpus')
 parser.add_argument('--weighted_sample', action='store_true', default=False, help='Use weighted sampling')
+parser.add_argument('--set', type=str, default='KMNIST', help='The dataset to be trained')
 parser.add_argument('--batch_size', type=int, default=256, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.1, help='init learning rate')
 parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
@@ -29,7 +30,7 @@ parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
 parser.add_argument('--report_freq', type=float, default=50, help='report frequency')
 parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
-parser.add_argument('--epochs', type=int, default=50, help='num of training epochs')
+parser.add_argument('--epochs', type=int, default=20, help='num of training epochs')
 parser.add_argument('--init_channels', type=int, default=16, help='num of init channels')
 parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
 parser.add_argument('--layers', type=int, default=8, help='total number of layers')
@@ -38,13 +39,11 @@ parser.add_argument('--cutout', action='store_true', default=False, help='use cu
 parser.add_argument('--cutout_length', type=int, default=6, help='cutout length')
 parser.add_argument('--log_dir', type=str, default='./log', help='logging file location')
 parser.add_argument('--seed', type=int, default=2, help='random seed')
-parser.add_argument('--set', type=str, default='K49', help='The dataset to be trained')
 parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
 parser.add_argument('--train_portion', type=float, default=0.5, help='portion of training data')
 parser.add_argument('--unrolled', action='store_true', default=False, help='use one-step unrolled validation loss')
 parser.add_argument('--arch_learning_rate', type=float, default=6e-4, help='learning rate for arch encoding')
 parser.add_argument('--arch_weight_decay', type=float, default=1e-3, help='weight decay for arch encoding')
-parser.add_argument('--model_dir', type=str, default="123", help='weight decay for arch encoding')
 
 args = parser.parse_args()
 
@@ -65,6 +64,14 @@ fh = logging.FileHandler(log_dir)
 fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 
+
+if args.set == 'KMNIST':
+  num_classes = 10
+elif args.set == 'K49':
+  num_classes = 49
+else:
+  raise ValueError("Invalid dataset name %s" % args.set)
+
 def main():
   if not torch.cuda.is_available():
     logging.info('no gpu device available')
@@ -81,20 +88,8 @@ def main():
 
   criterion = nn.CrossEntropyLoss()
   criterion = criterion.cuda()
-
-  # Create a KMNIST Model
-  model = Network(args.init_channels, args.input_channels, 10, args.layers, criterion)
-  # Load prtrained model
-  model_path = "log/" + args.model_dir
-  model.load_state_dict(torch.load(model_path + '/weights.pt'))
-  # Change the last layer
-  in_features = model.classifier.in_features
-  new_classifier = nn.Linear(in_features, 49)
-  torch.nn.init.xavier_uniform(new_classifier.weight)
-  model.classifier = new_classifier
+  model = Network(args.init_channels, args.input_channels, num_classes, args.layers, criterion)
   model = model.cuda()
-
-
   logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
   optimizer = torch.optim.AdamW(
@@ -104,9 +99,18 @@ def main():
 
   # Data augmentations
   train_transform, valid_trainsform = utils.data_transforms_Kuzushiji(args)
-  train_data = K49(args.data_dir, True, train_transform)
 
-  if args.weighted_sample:
+
+  # Dataset
+  if args.set == "KMNIST":
+    train_data = KMNIST(args.data_dir, True, train_transform)
+  elif args.set == "K49":
+    train_data = K49(args.data_dir, True, train_transform)
+  else:
+    raise ValueError("Unknown Dataset %s" % args.dataset)
+
+
+  if args.weighted_sample and args.set == "K49":
     # Generate the weights for sampler
     train_data, valid_data = train_data.split(train_transform, valid_trainsform, args.train_portion)
     train_weights = 1 / train_data.class_frequency[train_data.labels]
@@ -195,7 +199,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
     input_search = input_search.cuda()
     target_search = target_search.cuda()
 
-    if epoch >= 3:
+    if epoch >= 10:
       architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
 
     optimizer.zero_grad()

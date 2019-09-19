@@ -11,7 +11,7 @@ class torchModel(nn.Module):
         super(torchModel, self).__init__()
         layers = []
         n_layers = config['n_layers']
-        n_conv_layers = 1
+        n_conv_layers = 2
         kernel_size = 2
         in_channels = input_shape[0]
         out_channels = 4
@@ -19,10 +19,12 @@ class torchModel(nn.Module):
         self.dropout_prob = 0.2
 
         for i in range(n_conv_layers):
+
             c = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,
                           stride=2, padding=1
                          )
             a = nn.ReLU(inplace=False)
+            #b = nn.BatchNorm2d(out_channels, affine=True)
             p = nn.MaxPool2d(kernel_size=2, stride=1)
             layers.extend([c, a, p])
             in_channels = out_channels
@@ -41,8 +43,8 @@ class torchModel(nn.Module):
             n_out /= 2
 
         self.last_fc = nn.Linear(int(n_in), self.output_size)
-        self.dropout = nn.Dropout(p=self.dropout_prob)
-
+        self.dropout = nn.Dropout(p=0.2)
+    
     # generate input sample and forward to get shape
     def _get_conv_output(self, shape):
         bs = 1

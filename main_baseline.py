@@ -107,7 +107,7 @@ def main(model_config,
     # instantiate optimizer
     optimizer = model_optimizer(model.parameters(),
                                 lr=learning_rate,
-                                #weight_decay=args.weight_decay
+                                weight_decay=args.weight_decay
                                 )
     # use cosine LR scheduler
     #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -117,6 +117,8 @@ def main(model_config,
 
     best_acc = 0.0
     # Train the model
+    train_acc_lst = []
+    valid_acc_lst = []
     for epoch in range(num_epochs):
         logging.info('#' * 50)
         logging.info('Epoch [{}/{}]'.format(epoch + 1, num_epochs))
@@ -124,7 +126,10 @@ def main(model_config,
         train_score, train_loss = train(train_queue, model, criterion, optimizer)
         #scheduler.step()
         logging.info('(Unbalanced) Train accuracy %f', train_score)
+        train_acc_lst.append(train_score)
         valid_acc, valid_obj = infer(valid_queue, model, criterion)
+        valid_acc_lst.append(valid_acc)
+
         is_best = False
         if valid_acc > best_acc:
             best_acc = valid_acc
@@ -136,17 +141,58 @@ def main(model_config,
             'optimizer' : optimizer.state_dict(),
             }, is_best, log_path)
     test_prediction = []
+    
+    logging.info("train acc")
+    logging.info(train_acc_lst)
+    logging.info("valid acc")
+    logging.info(valid_acc_lst)
+    # Dataset
+    if args.set == "KMNIST":
+        train_data = KMNIST(args.data_dir, True, valid_transform)
+        test_data = KMNIST(args.data_dir, False, valid_transform)
+    elif args.set == "K49":
+        train_data = K49(args.data_dir, True, valid_transform)
+        test_data = K49(args.data_dir, False, valid_transform)
+    else:
+        raise ValueError("Unknown Dataset %s" % args.dataset)
+    
+    train_queue = torch.utils.data.DataLoader(
+        train_data, batch_size=args.batch_size, shuffle=False,
+        pin_memory=True, num_workers=2)
 
+    valid_queue = torch.utils.data.DataLoader(
+        test_data, batch_size=args.batch_size, shuffle=False,
+        pin_memory=True, num_workers=2)
+    
+
+    model.eval()
+    train_prediction = []  
+    for step, (input, target) in tqdm.tqdm(enumerate(train_queue), disable=True):
+        input = input.cuda()
+        target = target.cuda()
+        logits = model(input)[0]
+        pred = logits.argmax(dim=-1)
+        train_prediction.extend(pred.tolist())
+
+    test_prediction = []
     for step, (input, target) in tqdm.tqdm(enumerate(valid_queue), disable=True):
         input = input.cuda()
         target = target.cuda()
-        logits = model(input)
+        logits = model(input)[0]
         pred = logits.argmax(dim=-1)
         test_prediction.extend(pred.tolist())
+
+    train_labels = train_data.labels
     test_labels = test_data.labels
+
+    train_acc = np.sum(train_labels == train_prediction) / train_labels.shape[0]
+    test_acc = np.sum(test_labels == test_prediction) / test_labels.shape[0]
+    train_acc_bal = balanced_accuracy_score(train_labels, np.array(train_prediction))
     test_acc_bal = balanced_accuracy_score(test_labels, np.array(test_prediction))
 
-    logging.info("(balanced) test acc: %f", test_acc_bal)
+    logging.info("(unbalanced) train acc: %f, valid acc: %f", train_acc, test_acc)
+    logging.info("(balanced) train acc: %f, valid acc: %f", train_acc_bal, test_acc_bal)
+
 
 def train(train_queue, model, criterion, optimizer):
     objs = utils.AvgrageMeter()

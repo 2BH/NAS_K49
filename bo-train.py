@@ -39,7 +39,7 @@ parser.add_argument('--grad_clip', type=int, default=5, help='gradient clipping'
 parser.add_argument('--min_budget', type=int, default=3, help='minimal budget')
 parser.add_argument('--max_budget', type=int, default=9, help='maximal budget')
 parser.add_argument('--n_iterations', type=int, default=15, help='number of iterations for BO optimizer')
-parser.add_argument('--train_portion', type=float, default=0.8, help='portion of training data')
+parser.add_argument('--train_portion', type=float, default=0.7, help='portion of training data')
 parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
 parser.add_argument('--cutout_length', type=int, default=6, help='cutout length')

@@ -6,6 +6,7 @@ from torch.autograd import Variable
 from tqdm import tqdm
 
 from utils.utils import AvgrageMeter, accuracy
+from sklearn.metrics import balanced_accuracy_score
 
 
 class torchModel(nn.Module):
@@ -74,6 +75,8 @@ class torchModel(nn.Module):
         self.train()
 
         t = tqdm(loader)
+        y = []
+        y_pred = []
         for images, labels in t:
             images = images.to(device)
             labels = labels.to(device)
@@ -88,10 +91,14 @@ class torchModel(nn.Module):
             n = images.size(0)
             objs.update(loss.item(), n)
             score.update(acc.item(), n)
-
             t.set_description('(=> Training) Loss: {:.4f}'.format(objs.avg))
+            with torch.no_grad():
+                pred = logits.argmax(dim=-1)
+                y.extend(labels.tolist())
+                y_pred.extend(pred.tolist())
+        acc_bal = balanced_accuracy_score(y, y_pred)
 
-        return score.avg, objs.avg
+        return score.avg, objs.avg, acc_bal
 
     def eval_fn(self, loader, device, train=False):
         """
@@ -105,6 +112,8 @@ class torchModel(nn.Module):
         self.eval()
 
         t = tqdm(loader)
+        y = []
+        y_pred = []
         with torch.no_grad():  # no gradient needed
             for images, labels in t:
                 images = images.to(device)
@@ -115,6 +124,9 @@ class torchModel(nn.Module):
                 score.update(acc.item(), images.size(0))
 
                 t.set_description('(=> Test) Score: {:.4f}'.format(score.avg))
-
-        return score.avg
+                pred = outputs.argmax(dim=-1)
+                y.extend(labels.tolist())
+                y_pred.extend(pred.tolist())
+            acc_bal = balanced_accuracy_score(y, y_pred)
+        return score.avg, acc_bal
 

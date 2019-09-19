@@ -22,7 +22,7 @@ class BOWorker(Worker):
     """
     cs = CS.ConfigurationSpace()
     num_layers = CSH.UniformIntegerHyperparameter("num_layers", lower=6, upper=10, default_value=8, log=False)
-    model_learning_rate = CSH.UniformFloatHyperparameter('model_learning_rate', lower=3e-3, upper=3e-2, default_value=0.025, log=True)
+    model_learning_rate = CSH.UniformFloatHyperparameter('model_learning_rate', lower=2e-3, upper=3e-2, default_value=0.025, log=True)
     auxiliary_weight = CSH.UniformFloatHyperparameter('auxiliary_weight', lower=0.2, upper=0.5, default_value=0.4, log=False)
     init_channel = CSH.UniformIntegerHyperparameter('init_channel', lower=12, upper=24, default_value=16, log=False)
     drop_path_prob = CSH.UniformFloatHyperparameter('drop_path_prob', lower=0.2, upper=0.4, default_value=0.3, log=False)

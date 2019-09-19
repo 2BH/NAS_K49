@@ -24,9 +24,9 @@ parser.add_argument('--data_dir', type=str, default='./data', help='location of 
 parser.add_argument('--set', type=str, default='KMNIST', help='The dataset to be trained')
 parser.add_argument('--batch_size', type=int, default=128, help='batch size')
 parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
-parser.add_argument('--init_channels', type=int, default=16, help='num of init channels')
+parser.add_argument('--init_channels', type=int, default=24, help='num of init channels')
 parser.add_argument('--input_channels', type=int, default=1, help='num of input channels')
-parser.add_argument('--layers', type=int, default=8, help='total number of layers')
+parser.add_argument('--layers', type=int, default=10, help='total number of layers')
 parser.add_argument('--log_dir', type=str, default='./log', help='logging file location')
 parser.add_argument('--seed', type=int, default=0, help='random seed')
 parser.add_argument('--arch', type=str, default='PCDARTS', help='which architecture to use')
@@ -39,7 +39,17 @@ args = parser.parse_args()
 os.makedirs(args.log_dir, exist_ok=True)
 os.makedirs(args.data_dir, exist_ok=True)
 
-timestamp = "2019-08-27T20:13:09.223281"
+timestamp = "2019-09-12T10:10:20.365069"
+#2019-09-10T11:24:57.356339 K49_50_0
+#exp_2019-09-10T11:26:13.550827
+#exp_2019-09-10T11:26:13.551539
+#exp_2019-09-10T12:51:49.163722
+#exp_2019-09-10T12:51:49.164218
+#exp_2019-09-10T12:51:49.164601
+
+#exp_2019-09-12T10:10:20.364848
+#exp_2019-09-12T10:10:20.364970
+#exp_2019-09-12T10:10:20.365069
 
 data_dir = args.data_dir
 log_path = args.log_dir+'/exp_{}'.format(timestamp)
